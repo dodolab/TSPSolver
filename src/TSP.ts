@@ -2,6 +2,11 @@ import { Coord, makeCoord } from './Coord';
 
 // https://www.interviewbit.com/blog/travelling-salesman-problem/
 
+export type TSPEvent = {
+	currentCity: number;
+	nextCity: number;
+}
+
 /**
  * Travelling Salesman Problem Solver
  * Since this is a NP problem solver, it uses Dynamic Programming and a bit array
@@ -27,6 +32,15 @@ export class TSP {
 	memoizer: number[][];
 
 	solve(startCityIndex: number, citiesNum: number, distances: number[]) {
+		const generator = this.solveIteratively(startCityIndex, citiesNum, distances);
+		let val = generator.next();
+		while (!val.done) {
+			val = generator.next();
+		}
+		return this.tour; 
+	}
+
+	*solveIteratively(startCityIndex: number, citiesNum: number, distances: number[]): Generator<TSPEvent, TSPEvent, void> {
 		this.distances = distances;
 		this.citiesNum = citiesNum;
 		this.startCityIndex = startCityIndex;
@@ -57,6 +71,13 @@ export class TSP {
 						// invalid permutation
 						continue;
 					}
+
+					// report to the observers
+					yield {
+						currentCity: cityIndex,
+						nextCity: nextCityIndex,
+					}
+					
 					let permutationWithoutNextCity = permutation ^ (1 << nextCityIndex);
 					let minDist = Infinity;
 					// 4th loop: find the min distance from permutations that don't include the next city
@@ -118,7 +139,7 @@ export class TSP {
 
 		this.tour.push(this.startCityIndex);
 		this.tour.reverse();
-		return this.tour;
+		return null;
 	}
 
 	private generatePermutations(cityIndex: number) {

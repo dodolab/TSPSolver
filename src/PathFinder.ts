@@ -19,6 +19,7 @@ export class PathFinder {
 	queue: PriorityQueue<Coord>;
 	closestPath: Coord[];
 
+
 	findPath(start: Coord, end: Coord, map: MapGrid): Coord[] {
 		const generator = this.findPathIteratively(start, end, map);
 		let val = generator.next();

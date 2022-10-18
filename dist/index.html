@@ -2,20 +2,55 @@
 <html>
 
 <head>
-    <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
-    <meta content="utf-8" http-equiv="encoding">
-    <title>Salesman</title>
-    <link rel="stylesheet" href="/index.b8d1660c.css">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="HandheldFriendly" content="true">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="viewport" content="width=device-width initial-scale=1 maximum-scale=1 user-scalable=0">
+	<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+	<meta content="utf-8" http-equiv="encoding">
+	<title>Travelling Salesman Solver</title>
+	<link rel="stylesheet" href="/index.b8d1660c.css">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="HandheldFriendly" content="true">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<meta name="viewport" content="width=device-width initial-scale=1 maximum-scale=1 user-scalable=0">
 </head>
 
 <body>
-   <div>
-    <canvas id="gameCanvas" width="800" height="800"></canvas>
-   </div>
+	<div class="container">
+		<div class="form">
+			<div class="formField">
+				<label for="mapWidth">Map Width</label>
+				<input name="mapWidth" type="text">
+			</div>
+			<div class="formField">
+				<label for="mapHeight">Map Height</label>
+				<input name="mapHeight" type="text">
+			</div>
+			<div class="formField">
+				<label for="startCity">Start City Index</label>
+				<input name="startCity" type="text">
+			</div>
+			<div class="range-slider">
+				<p>Visual Speed
+					<input value="50000" min="0" max="100000" step="500" type="range">
+					<input type="number" value="75000" min="0" max="100000" step="500">
+				</p>
+				<p>Cities amount 
+					<input value="25000" min="0" max="100000" step="500" type="range">
+					<input type="number" value="25000" min="0" max="100000" step="500">
+				</p>
+				<p>Walls density
+					<input value="50000" min="0" max="100000" step="500" type="range">
+					<input type="number" value="75000" min="0" max="100000" step="500">
+				</p>
+			</div>
+			<div class="errorMsg"></div>
+			<div class="button">
+				<button name="confirmBut">Start</button>
+			</div>
+		</div>
+		<div>
+			<canvas id="gameCanvas"></canvas>
+		</div>
+	</div>
 </body>
 <script src="/index.b71e74eb.js" defer=""></script>
+
 </html>

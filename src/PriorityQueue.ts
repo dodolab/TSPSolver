@@ -22,6 +22,10 @@ export class PriorityQueue<T> {
 		}
 	}
 
+	getNodes(): T[] {
+		return this.collection.map(c => c[0]);
+	}
+
 	dequeue(): T {
 		let value = this.collection.shift();
 		return value[0];

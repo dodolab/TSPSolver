@@ -14,7 +14,7 @@ export class MapExplorer {
 	// blind map that gets gradually explored
 	blindMap: MapGrid;
 	// helping structure for backtracing to the previous milestone on the stack
-	backTrack: Map<number, number>;
+	backTrace: Map<number, number>;
 	// stack of checkpoints
 	checkpointStack: Stack<Coord>;
 	visitedNodes: Set<number>;
@@ -67,7 +67,7 @@ export class MapExplorer {
 					lastCheckpoint = this.checkpointStack.pop();
 				}
 
-				const pathToLastCheckpoint = this.backTrace(lastCheckpoint);
+				const pathToLastCheckpoint = this.addToBackTrace(lastCheckpoint);
 
 				//walk to the last checkpoint
 				for (let coord of pathToLastCheckpoint) {
@@ -127,7 +127,7 @@ export class MapExplorer {
 		return null;
 	}
 
-	private backTrace(target: Coord): Coord[] {
+	private addToBackTrace(target: Coord): Coord[] {
 
 		if (coordEq(target, this.current)) {
 			// trivial solution -> staying on the same place
@@ -144,7 +144,7 @@ export class MapExplorer {
 		} else {
 			// iterative backtracking
 			const path = [];
-			let nextStep = this.backTrack.get(this.coordToIndex(this.current));
+			let nextStep = this.backTrace.get(this.coordToIndex(this.current));
 			const toIndex = this.coordToIndex(target);
 
 			let overFlowCheck = 0;
@@ -153,7 +153,7 @@ export class MapExplorer {
 				if (nextStep === toIndex) {
 					break;
 				}
-				nextStep = this.backTrack.get(nextStep);
+				nextStep = this.backTrace.get(nextStep);
 
 				if(overFlowCheck++ >= this.blindMap.width * this.blindMap.height) {
 					throw new Error(`Backtrace got in an infinite loop for [${target.x},${target.y}]`);
@@ -167,7 +167,7 @@ export class MapExplorer {
 	private indexToCoord = (index: number): Coord => this.blindMap.indexToCoord(index);
 
 	private reset() {
-		this.backTrack = new Map();;
+		this.backTrace = new Map();;
 		this.visitedNodes = new Set();
 		this.exploredNodes = new Set();
 		this.blindMap.generateNeighbors();
@@ -182,7 +182,7 @@ export class MapExplorer {
 		this.visitedNodes.add(this.coordToIndex(coord));
 		if (!coordEq(this.current, coord)) {
 			// update backtrack
-			this.backTrack.set(this.coordToIndex(coord), this.coordToIndex(this.current));
+			this.backTrace.set(this.coordToIndex(coord), this.coordToIndex(this.current));
 		}
 		this.current = coord;
 	}
