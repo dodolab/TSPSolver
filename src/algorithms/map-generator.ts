@@ -1,5 +1,5 @@
 import { MapGrid } from "../structs/map-grid";
-import { makeCoord, manhattanDist } from '../structs/coords';
+import { makeCoord, manhattanDist } from '../structs/coord';
 import { MapTile } from '../structs/map-tile';
 import { MapExplorer } from './map-explorer';
 import Random from "./random-generator";

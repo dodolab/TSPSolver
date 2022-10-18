@@ -9,7 +9,7 @@ import {
 	coordTopRight,
 	coordBottomLeft,
 	coordBottomRight
-} from './coords';
+} from './coord';
 import { MapTile, TileType } from './map-tile';
 
 export type Neighbor = 'left' | 'right' | 'top' | 'bottom' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';

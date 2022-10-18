@@ -1,4 +1,4 @@
-import { makeCoord } from '../structs/coords';
+import { makeCoord } from '../structs/coord';
 import { loadMapFromString } from '../utils';
 import { MSTFinder } from '../algorithms/mst-finder';
 

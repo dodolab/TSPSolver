@@ -1,5 +1,6 @@
 import { MapGrid } from '../structs/map-grid';
-import { Coord, makeCoord } from '../structs/coords';
+import { Coord, makeCoord } from '../structs/coord';
+import { StateMachine } from '../structs/state-machine';
 
 export type CanvasRendererData = {
 	map: MapGrid;
@@ -9,22 +10,25 @@ export type CanvasRendererData = {
 	milestones?: Coord[];
 }
 
-export class CanvasRenderer {
+export class CanvasRenderer<Context> {
 	lastFrameTime = 0;
 	lastTickTime = 0;
 	time = 0;
 	canvas: HTMLCanvasElement;
 	ctx: CanvasRenderingContext2D;
 	speed: number = 0.5;
-	tickHandler: () => CanvasRendererData;
+
+	stateMachine: StateMachine<Context, CanvasRendererData>;
+	context: Context;
 
 	constructor(canvas: HTMLCanvasElement) {
 		this.canvas = canvas;
 		this.ctx = canvas.getContext('2d');
 	}
 
-	start(tickHandler: () => CanvasRendererData) {
-		this.tickHandler = tickHandler;
+	start(stateMachine: StateMachine<Context, CanvasRendererData>, context: Context) {
+		this.stateMachine = stateMachine;
+		this.context = context;
 		this.loop(performance.now());
 	}
 
@@ -41,7 +45,7 @@ export class CanvasRenderer {
 		if(iterations > 0) {
 			let data = null;
 			for (let i = 0; i < iterations; i++) {
-				data = this.tickHandler();
+				data = this.stateMachine.run(this.context);
 				this.lastTickTime = this.lastFrameTime;
 			}
 			// render only last data

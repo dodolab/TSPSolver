@@ -1,5 +1,5 @@
 import { MapGenerator } from '../algorithms/map-generator';
-import { makeCoord } from '../structs/coords';
+import { makeCoord } from '../structs/coord';
 import { MapExplorer } from '../algorithms/map-explorer';
 
 const SEED = 1001;

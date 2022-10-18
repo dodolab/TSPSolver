@@ -1,4 +1,4 @@
-import { Coord } from '../structs/coords';
+import { Coord } from '../structs/coord';
 import { MapGrid } from '../structs/map-grid';
 import { PriorityQueue } from '../structs/priority-queue';
 

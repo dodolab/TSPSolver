@@ -1,4 +1,4 @@
-import { Coord } from './coords';
+import { Coord } from './coord';
 import { Neighbor } from './map-grid';
 
 export type TileType = 'UNKNOWN' | 'ROAD' | 'WALL' | 'CITY';

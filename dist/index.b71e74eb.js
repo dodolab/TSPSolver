@@ -536,6 +536,7 @@ var _structs = require("./structs");
 var _algorithms = require("./algorithms");
 var _utils = require("./utils");
 var _renderers = require("./renderers");
+var _stateMachine = require("./structs/state-machine");
 class Context {
     generator = new (0, _algorithms.MapGenerator)();
     generatorGenerator = null;
@@ -547,149 +548,167 @@ class Context {
     mstGenerator = null;
     tsp = new (0, _algorithms.TSPSolver)();
     tspGenerator = null;
+    baseSpeed = 2;
+}
+class Runner {
     start(renderer, width, height, cities, walls) {
-        this.mapWidth = width;
-        this.mapHeight = height;
-        this.mapCities = cities;
-        this.mapWalls = walls;
-        this.exploreGenerator = this.pathFinderGenerator = this.tspGenerator = this.mstGenerator = null;
-        this.completeTour = null;
-        this.state = "GENERATE";
-        const baseSpeed = renderer.speed;
-        renderer.start(()=>{
-            switch(this.state){
-                case "GENERATE":
-                    renderer.speed = baseSpeed;
-                    return this.handleGenerate();
-                case "EXPLORE":
-                    renderer.speed = baseSpeed;
-                    return this.handleExplore();
-                case "SEARCH_BACK":
-                    renderer.speed = baseSpeed;
-                    return this.handleSearchBack();
-                case "WALK_BACK":
-                    renderer.speed = baseSpeed / 10;
-                    return this.handleWalkBack();
-                case "TSP_PREPARE":
-                    renderer.speed = baseSpeed / 10;
-                    return this.handleTSPPrepare();
-                case "TSP_SOLVE":
-                    renderer.speed = baseSpeed * 10;
-                    return this.handleTSPSolve();
-                case "TSP_WALK":
-                    renderer.speed = baseSpeed / 2;
-                    return this.handleTSPWalk();
-            }
-        });
+        const context = new Context();
+        context.mapWidth = width;
+        context.mapHeight = height;
+        context.mapCities = cities;
+        context.mapWalls = walls;
+        context.renderer = renderer;
+        context.exploreGenerator = context.pathFinderGenerator = context.tspGenerator = context.mstGenerator = null;
+        context.completeTour = null;
+        const machine = new (0, _stateMachine.StateMachine)();
+        machine.addState(GenerateState).addState(ExploreState).addTransition(GenerateState.name, ExploreState.name).addState(SearchBackState).addTransition(ExploreState.name, SearchBackState.name).addState(WalkBackState).addTransition(SearchBackState.name, WalkBackState.name).addState(TSPPrepareState).addTransition(WalkBackState.name, TSPPrepareState.name).addState(TSPSolveState).addTransition(TSPPrepareState.name, TSPSolveState.name).addState(TSPWalkState).addTransition(TSPSolveState.name, TSPWalkState.name).setInitialState(GenerateState.name);
+        renderer.start(machine, context);
     }
-    handleGenerate() {
-        if (!this.generatorGenerator) this.generatorGenerator = this.generator.generateMapIteratively(this.mapWidth, this.mapHeight, this.mapCities, this.mapWalls);
-        const status = this.generatorGenerator.next();
+}
+const GenerateState = {
+    name: "GENERATE",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed;
+        context.generatorGenerator = context.generator.generateMapIteratively(context.mapWidth, context.mapHeight, context.mapCities, context.mapWalls);
+    },
+    handlerFunc: (context)=>{
+        const status = context.generatorGenerator.next();
         if (!status.done && status.value) return {
-            map: this.generator.generatedMap,
+            map: context.generator.generatedMap,
             currentNode: status.value.currentTile.coord
         };
         else {
-            this.map = this.generator.generatedMap;
-            this.salesmanStart = (0, _utils.selectRandomCity)(this.map).coord;
-            this.state = "EXPLORE";
+            context.map = context.generator.generatedMap;
+            context.salesmanStart = (0, _utils.selectRandomCity)(context.map).coord;
+            return null;
         }
     }
-    handleExplore() {
-        if (!this.exploreGenerator) this.exploreGenerator = this.explorer.exploreMapIteratively(this.salesmanStart, this.map);
-        const status = this.exploreGenerator.next();
+};
+const ExploreState = {
+    name: "EXPLORE",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed;
+        context.exploreGenerator = context.explorer.exploreMapIteratively(context.salesmanStart, context.map);
+    },
+    handlerFunc: (context)=>{
+        const status = context.exploreGenerator.next();
         if (!status.done && status.value) return {
-            map: this.explorer.blindMap,
-            currentNode: this.explorer.current,
-            backtrace: this.explorer.backTrace,
-            milestones: this.explorer.checkpointStack.getNodes()
+            map: context.explorer.blindMap,
+            currentNode: context.explorer.current,
+            backtrace: context.explorer.backTrace,
+            milestones: context.explorer.checkpointStack.getNodes()
         };
-        else this.state = "SEARCH_BACK";
+        else return null;
     }
-    handleSearchBack() {
-        if (!this.pathFinderGenerator) this.pathFinderGenerator = this.pathFinder.findPathIteratively(this.explorer.current, this.salesmanStart, this.map);
-        const status = this.pathFinderGenerator.next();
+};
+const SearchBackState = {
+    name: "SEARCH_BACK",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed;
+        context.pathFinderGenerator = context.pathFinder.findPathIteratively(context.explorer.current, context.salesmanStart, context.map);
+    },
+    handlerFunc: (context)=>{
+        const status = context.pathFinderGenerator.next();
         if (!status.done && status.value) return {
-            map: this.map,
-            currentNode: this.explorer.current,
-            backtrace: this.pathFinder.backTrace,
-            milestones: this.pathFinder.queue.getNodes()
+            map: context.map,
+            currentNode: context.explorer.current,
+            backtrace: context.pathFinder.backTrace,
+            milestones: context.pathFinder.queue.getNodes()
         };
         else {
-            this.walkBack = this.pathFinder.closestPath;
-            this.walkBackIndex = 0;
-            this.state = "WALK_BACK";
+            context.walkBack = context.pathFinder.closestPath;
+            context.walkBackIndex = 0;
+            return null;
         }
     }
-    handleWalkBack() {
-        if (this.walkBackIndex < this.walkBack.length) return {
-            map: this.map,
-            currentNode: this.walkBack[this.walkBackIndex++],
-            backtrace: this.pathFinder.backTrace
+};
+const WalkBackState = {
+    name: "WALK_BACK",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed / 10;
+    },
+    handlerFunc: (context)=>{
+        if (context.walkBackIndex < context.walkBack.length) return {
+            map: context.map,
+            currentNode: context.walkBack[context.walkBackIndex++],
+            backtrace: context.pathFinder.backTrace
         };
-        else this.state = "TSP_PREPARE";
+        else return null;
     }
-    handleTSPPrepare() {
-        if (!this.mstGenerator) {
-            const cities = this.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
-            this.mstGenerator = this.mst.findMSTIteratively(cities, this.map);
-        }
-        const status = this.mstGenerator.next();
+};
+const TSPPrepareState = {
+    name: "TSP_PREPARE",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed / 10;
+        const cities = context.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+        context.mstGenerator = context.mst.findMSTIteratively(cities, context.map);
+    },
+    handlerFunc: (context)=>{
+        const status = context.mstGenerator.next();
         if (!status.done && status.value) return {
-            map: this.map,
+            map: context.map,
             highlights: [
                 status.value.currentCoord
             ],
             backtrace: status.value.minPath
         };
-        else this.state = "TSP_SOLVE";
+        else return null;
     }
-    handleTSPSolve() {
-        const cities = this.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
-        if (!this.tspGenerator) {
-            const salesmanCity = cities.findIndex((c)=>(0, _structs.coordEq)(c, this.salesmanStart));
-            this.tspGenerator = this.tsp.solveIteratively(salesmanCity, cities.length, this.mst.spanningTree);
-        }
-        const status = this.tspGenerator.next();
+};
+const TSPSolveState = {
+    name: "TSP_SOLVE",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed * 10;
+        const cities = context.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+        const salesmanCity = cities.findIndex((c)=>(0, _structs.coordEq)(c, context.salesmanStart));
+        context.tspGenerator = context.tsp.solveIteratively(salesmanCity, cities.length, context.mst.spanningTree);
+    },
+    handlerFunc: (context)=>{
+        const cities = context.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+        const status = context.tspGenerator.next();
         if (!status.done && status.value) return {
-            map: this.map,
+            map: context.map,
             highlights: [
                 cities[status.value.currentCity],
                 cities[status.value.nextCity]
             ]
         };
-        else this.state = "TSP_WALK";
+        else return null;
     }
-    handleTSPWalk() {
-        if (!this.completeTour) {
-            this.completeTour = [];
-            this.completeTourIndex = 0;
-            const cities = this.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
-            for(let i = 0; i < this.tsp.tour.length; i++){
-                const cityFrom = cities[this.tsp.tour[i]];
-                const cityTo = cities[this.tsp.tour[i !== this.tsp.tour.length - 1 ? i + 1 : 0]];
-                const path = this.pathFinder.findPath(cityFrom, cityTo, this.map);
-                this.completeTour.push(...path);
-            }
+};
+const TSPWalkState = {
+    name: "TSP_WALK",
+    firstRun: (context)=>{
+        context.renderer.speed = context.baseSpeed / 2;
+        context.completeTour = [];
+        context.completeTourIndex = 0;
+        const cities = context.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+        for(let i = 0; i < context.tsp.tour.length; i++){
+            const cityFrom = cities[context.tsp.tour[i]];
+            const cityTo = cities[context.tsp.tour[i !== context.tsp.tour.length - 1 ? i + 1 : 0]];
+            const path = context.pathFinder.findPath(cityFrom, cityTo, context.map);
+            context.completeTour.push(...path);
         }
+    },
+    handlerFunc: (context)=>{
         const output = {
-            map: this.map,
-            currentNode: this.completeTour[this.completeTourIndex]
+            map: context.map,
+            currentNode: context.completeTour[context.completeTourIndex]
         };
-        this.completeTourIndex = (this.completeTourIndex + 1) % this.completeTour.length;
+        context.completeTourIndex = (context.completeTourIndex + 1) % context.completeTour.length;
         return output;
     }
-}
+};
 const canvas = document.getElementById("gameCanvas");
 const renderer = new (0, _renderers.CanvasRenderer)(canvas);
-const context = new Context();
-context.start(renderer, 10, 10, 10, 80);
+const runner = new Runner();
+runner.start(renderer, 10, 10, 10, 80);
 const ui = new (0, _renderers.UIRenderer)();
 ui.init(canvas, 10, 10); // another ideas:
  // https://en.wikipedia.org/wiki/Flood_fill
  // https://gamedev.stackexchange.com/questions/55344/algorithm-for-exploring-filling-grid-map
 
-},{"./utils":"dsXzW","./structs":"iTVbw","./algorithms":"03p2T","./renderers":"cdoPD"}],"dsXzW":[function(require,module,exports) {
+},{"./utils":"dsXzW","./structs":"iTVbw","./algorithms":"03p2T","./renderers":"cdoPD","./structs/state-machine":"4Qdjn"}],"dsXzW":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "loadMapFromString", ()=>loadMapFromString);
@@ -878,18 +897,102 @@ exports.export = function(dest, destName, get) {
 },{}],"iTVbw":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-var _coords = require("./coords");
-parcelHelpers.exportAll(_coords, exports);
+var _coord = require("./coord");
+parcelHelpers.exportAll(_coord, exports);
 var _mapGrid = require("./map-grid");
 parcelHelpers.exportAll(_mapGrid, exports);
 var _mapTile = require("./map-tile");
 parcelHelpers.exportAll(_mapTile, exports);
 var _priorityQueue = require("./priority-queue");
 parcelHelpers.exportAll(_priorityQueue, exports);
-var _stackS = require("./stack-s");
-parcelHelpers.exportAll(_stackS, exports);
+var _stack = require("./stack");
+parcelHelpers.exportAll(_stack, exports);
 
-},{"./coords":"jEQI2","./map-grid":"5C0ri","./map-tile":"NGSV0","./priority-queue":"ahez4","./stack-s":"86TvF","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"jEQI2":[function(require,module,exports) {
+},{"./map-grid":"5C0ri","./map-tile":"NGSV0","./priority-queue":"ahez4","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./coord":"9BD4d","./stack":"ezd47"}],"5C0ri":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+/**
+ * 2D map structure
+ */ parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
+var _coord = require("./coord");
+var _mapTile = require("./map-tile");
+class MapGrid {
+    mapArray = [];
+    neighborsGenerated = false;
+    constructor(width, height){
+        this.width = width;
+        this.height = height;
+    }
+    coordToIndex = (coord)=>{
+        const { x , y  } = coord;
+        if (x < 0 || y < 0 || x >= this.width || y >= this.height) throw new Error(`Coordinate [${coord.x},${coord.y}] outside the boundaries!`);
+        return y * this.width + x;
+    };
+    indexToCoord = (x)=>{
+        return (0, _coord.makeCoord)(x % this.width, Math.floor(x / this.width));
+    };
+    isInsideMap = (coord)=>{
+        return coord.x >= 0 && coord.y >= 0 && coord.x < this.width && coord.y < this.height;
+    };
+    getTile(coord) {
+        if (!this.isInsideMap(coord)) return null;
+        return this.mapArray[this.coordToIndex(coord)];
+    }
+    setTile(coord, type) {
+        this.mapArray[this.coordToIndex(coord)] = new (0, _mapTile.MapTile)(coord, type);
+    }
+    generateNeighbors() {
+        for (let tile of this.mapArray){
+            // this structure is not actually needed
+            tile.neighbors = {
+                left: this.getTile((0, _coord.coordLeft)(tile.coord)),
+                right: this.getTile((0, _coord.coordRight)(tile.coord)),
+                top: this.getTile((0, _coord.coordTop)(tile.coord)),
+                bottom: this.getTile((0, _coord.coordBottom)(tile.coord)),
+                topLeft: this.getTile((0, _coord.coordTopLeft)(tile.coord)),
+                topRight: this.getTile((0, _coord.coordTopRight)(tile.coord)),
+                bottomLeft: this.getTile((0, _coord.coordBottomLeft)(tile.coord)),
+                bottomRight: this.getTile((0, _coord.coordBottomRight)(tile.coord))
+            };
+            // this order is very important
+            tile.directionalNeighbors = [
+                tile.neighbors.top,
+                tile.neighbors.left,
+                tile.neighbors.bottom,
+                tile.neighbors.right
+            ];
+            tile.neighborsArr = [
+                tile.neighbors.top,
+                tile.neighbors.left,
+                tile.neighbors.bottom,
+                tile.neighbors.right,
+                tile.neighbors.topLeft,
+                tile.neighbors.topRight,
+                tile.neighbors.bottomLeft,
+                tile.neighbors.bottomRight
+            ];
+        }
+        this.neighborsGenerated = true;
+    }
+}
+
+},{"./map-tile":"NGSV0","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./coord":"9BD4d"}],"NGSV0":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+/**
+ * Structure for map tiles, keeping references to all neighbours
+ */ parcelHelpers.export(exports, "MapTile", ()=>MapTile);
+class MapTile {
+    constructor(coord, type){
+        this.coord = coord;
+        this.type = type;
+    }
+    get isWalkable() {
+        return this.type === "ROAD" || this.type === "CITY";
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"9BD4d":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "makeCoord", ()=>makeCoord);
@@ -970,90 +1073,6 @@ const manhattanDist = (a, b)=>{
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 };
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"5C0ri":[function(require,module,exports) {
-var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-parcelHelpers.defineInteropFlag(exports);
-/**
- * 2D map structure
- */ parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
-var _coords = require("./coords");
-var _mapTile = require("./map-tile");
-class MapGrid {
-    mapArray = [];
-    neighborsGenerated = false;
-    constructor(width, height){
-        this.width = width;
-        this.height = height;
-    }
-    coordToIndex = (coord)=>{
-        const { x , y  } = coord;
-        if (x < 0 || y < 0 || x >= this.width || y >= this.height) throw new Error(`Coordinate [${coord.x},${coord.y}] outside the boundaries!`);
-        return y * this.width + x;
-    };
-    indexToCoord = (x)=>{
-        return (0, _coords.makeCoord)(x % this.width, Math.floor(x / this.width));
-    };
-    isInsideMap = (coord)=>{
-        return coord.x >= 0 && coord.y >= 0 && coord.x < this.width && coord.y < this.height;
-    };
-    getTile(coord) {
-        if (!this.isInsideMap(coord)) return null;
-        return this.mapArray[this.coordToIndex(coord)];
-    }
-    setTile(coord, type) {
-        this.mapArray[this.coordToIndex(coord)] = new (0, _mapTile.MapTile)(coord, type);
-    }
-    generateNeighbors() {
-        for (let tile of this.mapArray){
-            // this structure is not actually needed
-            tile.neighbors = {
-                left: this.getTile((0, _coords.coordLeft)(tile.coord)),
-                right: this.getTile((0, _coords.coordRight)(tile.coord)),
-                top: this.getTile((0, _coords.coordTop)(tile.coord)),
-                bottom: this.getTile((0, _coords.coordBottom)(tile.coord)),
-                topLeft: this.getTile((0, _coords.coordTopLeft)(tile.coord)),
-                topRight: this.getTile((0, _coords.coordTopRight)(tile.coord)),
-                bottomLeft: this.getTile((0, _coords.coordBottomLeft)(tile.coord)),
-                bottomRight: this.getTile((0, _coords.coordBottomRight)(tile.coord))
-            };
-            // this order is very important
-            tile.directionalNeighbors = [
-                tile.neighbors.top,
-                tile.neighbors.left,
-                tile.neighbors.bottom,
-                tile.neighbors.right
-            ];
-            tile.neighborsArr = [
-                tile.neighbors.top,
-                tile.neighbors.left,
-                tile.neighbors.bottom,
-                tile.neighbors.right,
-                tile.neighbors.topLeft,
-                tile.neighbors.topRight,
-                tile.neighbors.bottomLeft,
-                tile.neighbors.bottomRight
-            ];
-        }
-        this.neighborsGenerated = true;
-    }
-}
-
-},{"./coords":"jEQI2","./map-tile":"NGSV0","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"NGSV0":[function(require,module,exports) {
-var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-parcelHelpers.defineInteropFlag(exports);
-/**
- * Structure for map tiles, keeping references to all neighbours
- */ parcelHelpers.export(exports, "MapTile", ()=>MapTile);
-class MapTile {
-    constructor(coord, type){
-        this.coord = coord;
-        this.type = type;
-    }
-    get isWalkable() {
-        return this.type === "ROAD" || this.type === "CITY";
-    }
-}
-
 },{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"ahez4":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
@@ -1093,7 +1112,7 @@ class PriorityQueue {
     }
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"86TvF":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"ezd47":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 /**
@@ -1155,9 +1174,9 @@ parcelHelpers.exportAll(_tspSolver, exports);
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "MapExplorer", ()=>MapExplorer);
-var _coords = require("../structs/coords");
+var _coord = require("../structs/coord");
 var _mapGrid = require("../structs/map-grid");
-var _stackS = require("../structs/stack-s");
+var _stack = require("../structs/stack");
 class MapExplorer {
     exploreMap(startCoord, map) {
         const generator = this.exploreMapIteratively(startCoord, map);
@@ -1208,7 +1227,7 @@ class MapExplorer {
                         tile: neigh
                     };
                 }
-                if (neigh.isWalkable && (0, _coords.isDirectionalNeighbor)(neigh.coord, this.current) && !this.isVisited(neigh.coord)) {
+                if (neigh.isWalkable && (0, _coord.isDirectionalNeighbor)(neigh.coord, this.current) && !this.isVisited(neigh.coord)) {
                     neighbourToWalk = neigh.coord;
                     neighboursToWalkCnt++;
                 }
@@ -1230,12 +1249,12 @@ class MapExplorer {
         return null;
     }
     addToBackTrace(target) {
-        if ((0, _coords.coordEq)(target, this.current)) // trivial solution -> staying on the same place
+        if ((0, _coord.coordEq)(target, this.current)) // trivial solution -> staying on the same place
         return [
             target
         ];
         if (this.blindMap.getTile(target).type === "UNKNOWN") throw new Error(`Can\'t walk to an unknown area: [${target.x},${target.y}]`);
-        if ((0, _coords.isDirectionalNeighbor)(target, this.current)) // semi-trivial solution - going one cell back
+        if ((0, _coord.isDirectionalNeighbor)(target, this.current)) // semi-trivial solution - going one cell back
         return [
             target
         ];
@@ -1258,19 +1277,19 @@ class MapExplorer {
     indexToCoord = (index)=>this.blindMap.indexToCoord(index);
     reset(width, height) {
         this.blindMap = new (0, _mapGrid.MapGrid)(width, height);
-        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++)this.blindMap.setTile((0, _coords.makeCoord)(i, j), "UNKNOWN");
+        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++)this.blindMap.setTile((0, _coord.makeCoord)(i, j), "UNKNOWN");
         this.backTrace = new Map();
         this.visitedNodes = new Set();
         this.exploredNodes = new Set();
         this.blindMap.generateNeighbors();
-        this.checkpointStack = new (0, _stackS.Stack)();
+        this.checkpointStack = new (0, _stack.Stack)();
     }
     isVisited(coord) {
         return this.visitedNodes.has(this.coordToIndex(coord));
     }
     visitNewNode(coord) {
         this.visitedNodes.add(this.coordToIndex(coord));
-        if (!(0, _coords.coordEq)(this.current, coord)) // update backtrack
+        if (!(0, _coord.coordEq)(this.current, coord)) // update backtrack
         this.backTrace.set(this.coordToIndex(coord), this.coordToIndex(this.current));
         this.current = coord;
     }
@@ -1283,12 +1302,12 @@ class MapExplorer {
     }
 }
 
-},{"../structs/coords":"jEQI2","../structs/map-grid":"5C0ri","../structs/stack-s":"86TvF","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"kxZIA":[function(require,module,exports) {
+},{"../structs/map-grid":"5C0ri","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","../structs/coord":"9BD4d","../structs/stack":"ezd47"}],"kxZIA":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "MapGenerator", ()=>MapGenerator);
 var _mapGrid = require("../structs/map-grid");
-var _coords = require("../structs/coords");
+var _coord = require("../structs/coord");
 var _mapExplorer = require("./map-explorer");
 var _randomGenerator = require("./random-generator");
 var _randomGeneratorDefault = parcelHelpers.interopDefault(_randomGenerator);
@@ -1307,9 +1326,9 @@ class MapGenerator {
         const random = new (0, _randomGeneratorDefault.default)(this.randomSeed);
         // start with roads
         for(let i = 0; i < width; i++)for(let j = 0; j < height; j++){
-            this.generatedMap.setTile((0, _coords.makeCoord)(i, j), "ROAD");
+            this.generatedMap.setTile((0, _coord.makeCoord)(i, j), "ROAD");
             yield {
-                currentTile: this.generatedMap.getTile((0, _coords.makeCoord)(i, j))
+                currentTile: this.generatedMap.getTile((0, _coord.makeCoord)(i, j))
             };
         }
         this.generatedMap.generateNeighbors();
@@ -1365,7 +1384,7 @@ class MapGenerator {
             // search for walls that have neighbours that were not visited
             // and sort them from closest to the starting node
             const allWalls = this.generatedMap.mapArray.filter((tile)=>tile.type === "WALL");
-            const suspiciousWalls = allWalls.filter((wall)=>wall.neighborsArr.find((neigh)=>neigh && neigh.isWalkable && !explorer.visitedNodes.has(this.generatedMap.coordToIndex(neigh.coord)))).sort((a, b)=>(0, _coords.manhattanDist)(a.coord, firstCityCoord) - (0, _coords.manhattanDist)(b.coord, firstCityCoord));
+            const suspiciousWalls = allWalls.filter((wall)=>wall.neighborsArr.find((neigh)=>neigh && neigh.isWalkable && !explorer.visitedNodes.has(this.generatedMap.coordToIndex(neigh.coord)))).sort((a, b)=>(0, _coord.manhattanDist)(a.coord, firstCityCoord) - (0, _coord.manhattanDist)(b.coord, firstCityCoord));
             if (suspiciousWalls.length > 0) {
                 // remove the closest suspicious wall
                 const wallToRemove = suspiciousWalls[0];
@@ -1392,7 +1411,7 @@ class MapGenerator {
     }
 }
 
-},{"../structs/map-grid":"5C0ri","../structs/coords":"jEQI2","./map-explorer":"9xSVq","./random-generator":"iGQAv","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"iGQAv":[function(require,module,exports) {
+},{"../structs/map-grid":"5C0ri","./map-explorer":"9xSVq","./random-generator":"iGQAv","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","../structs/coord":"9BD4d"}],"iGQAv":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 class Random {
@@ -1418,7 +1437,7 @@ exports.default = Random;
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "MSTFinder", ()=>MSTFinder);
-var _coords = require("../structs/coords");
+var _coord = require("../structs/coord");
 var _pathFinder = require("./path-finder");
 class MSTFinder {
     spanningTree = [];
@@ -1437,7 +1456,7 @@ class MSTFinder {
             // referrential coordinate is a coordinate different from coord
             // it can be anything. Dijkstra will search the whole map regardless of how
             // close the refCoord is. It mustn't be te same coordinate, though
-            let refCoord = coords.find((c)=>!(0, _coords.coordEq)(c, coord));
+            let refCoord = coords.find((c)=>!(0, _coord.coordEq)(c, coord));
             if (!refCoord) // trivial solution -> only one node
             refCoord = coords[0];
             // the path itself doesn't interests us...
@@ -1459,7 +1478,7 @@ class MSTFinder {
     }
 }
 
-},{"../structs/coords":"jEQI2","./path-finder":"zPxe2","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"zPxe2":[function(require,module,exports) {
+},{"./path-finder":"zPxe2","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","../structs/coord":"9BD4d"}],"zPxe2":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 /**
@@ -1688,7 +1707,7 @@ parcelHelpers.exportAll(_uiRenderer, exports);
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "CanvasRenderer", ()=>CanvasRenderer);
-var _coords = require("../structs/coords");
+var _coord = require("../structs/coord");
 class CanvasRenderer {
     lastFrameTime = 0;
     lastTickTime = 0;
@@ -1698,8 +1717,9 @@ class CanvasRenderer {
         this.canvas = canvas;
         this.ctx = canvas.getContext("2d");
     }
-    start(tickHandler) {
-        this.tickHandler = tickHandler;
+    start(stateMachine, context) {
+        this.stateMachine = stateMachine;
+        this.context = context;
         this.loop(performance.now());
     }
     loop(time) {
@@ -1712,7 +1732,7 @@ class CanvasRenderer {
         if (iterations > 0) {
             let data = null;
             for(let i = 0; i < iterations; i++){
-                data = this.tickHandler();
+                data = this.stateMachine.run(this.context);
                 this.lastTickTime = this.lastFrameTime;
             }
             // render only last data
@@ -1725,7 +1745,7 @@ class CanvasRenderer {
         const blockSize = this.canvas.width / data.map.width;
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         for(let i = 0; i < data.map.width; i++)for(let j = 0; j < data.map.height; j++){
-            const coord = (0, _coords.makeCoord)(i, j);
+            const coord = (0, _coord.makeCoord)(i, j);
             const tile = data.map.getTile(coord);
             switch(tile?.type){
                 case "UNKNOWN":
@@ -1779,7 +1799,7 @@ class CanvasRenderer {
     }
 }
 
-},{"../structs/coords":"jEQI2","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hutv1":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","../structs/coord":"9BD4d"}],"hutv1":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "UIRenderer", ()=>UIRenderer);
@@ -1830,6 +1850,52 @@ class UIRenderer {
                 rangeS[1].value = `${number2}`;
             };
         });
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"4Qdjn":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "StateMachine", ()=>StateMachine);
+class StateMachine {
+    states = new Map();
+    transitions = new Map();
+    running = false;
+    addState(state) {
+        this.states.set(state.name, state);
+        return this; // chainable
+    }
+    setInitialState(name) {
+        this.currentState = this.states.get(name);
+        return this; // chainable
+    }
+    addTransition(from, to) {
+        this.transitions.set(from, to);
+        return this; // chainable
+    }
+    run(context) {
+        if (!this.running) {
+            this.running = true;
+            this.currentState.firstRun?.(context);
+        }
+        if (this.currentState) {
+            const result = this.currentState.handlerFunc(context);
+            if (result === null) {
+                this.currentState.cleanUp?.(context);
+                this.gotoNext(context);
+                // run again
+                this.run(context);
+            } else return result;
+        } else // finish
+        return null;
+    }
+    gotoNext(context) {
+        const newState = this.transitions.get(this.currentState.name);
+        if (newState) {
+            this.currentState = this.states.get(newState);
+            this.currentState.firstRun?.(context);
+        } else // finish
+        return null;
     }
 }
 

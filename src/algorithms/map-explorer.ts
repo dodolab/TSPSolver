@@ -1,6 +1,6 @@
-import { Coord, makeCoord, coordEq, isDirectionalNeighbor } from '../structs/coords';
+import { Coord, makeCoord, coordEq, isDirectionalNeighbor } from '../structs/coord';
 import { MapGrid } from '../structs/map-grid';
-import { Stack } from '../structs/stack-s';
+import { Stack } from '../structs/stack';
 import { TileType, MapTile } from '../structs/map-tile';
 
 export type ExploreEvent = {

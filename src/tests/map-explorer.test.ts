@@ -1,4 +1,4 @@
-import { makeCoord } from '../structs/coords';
+import { makeCoord } from '../structs/coord';
 import { MapExplorer } from '../algorithms/map-explorer';
 import { loadMapFromString } from '../utils';
 

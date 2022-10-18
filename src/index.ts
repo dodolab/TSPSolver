@@ -12,11 +12,14 @@ import {
 	MapGeneratorEvent } from './algorithms';
 import { selectRandomCity } from './utils';
 import { CanvasRenderer, CanvasRendererData, UIRenderer } from './renderers';
+import { StateMachine, State } from './structs/state-machine';
 
 
-type ContextState = 'GENERATE' | 'EXPLORE' | 'SEARCH_BACK' | 'WALK_BACK' | 'TSP_PREPARE' | 'TSP_SOLVE' | 'TSP_WALK';
+type StateName = 'GENERATE' | 'EXPLORE' | 'SEARCH_BACK' | 'WALK_BACK' | 'TSP_PREPARE' | 'TSP_SOLVE' | 'TSP_WALK';
 
-
+type ContextState = {
+	name: StateName;
+};
 
 class Context {
 	mapWidth: number;
@@ -49,172 +52,201 @@ class Context {
 	completeTour: Coord[];
 	completeTourIndex: number;
 
-	start(renderer: CanvasRenderer, width: number, height: number, cities: number, walls: number) {
-		this.mapWidth = width;
-		this.mapHeight = height;
-		this.mapCities = cities;
-		this.mapWalls = walls;
+	baseSpeed = 2;
 
-		this.exploreGenerator = this.pathFinderGenerator = this.tspGenerator = this.mstGenerator = null;
-		this.completeTour = null;
-		this.state = 'GENERATE';
-		const baseSpeed = renderer.speed;
+	renderer: CanvasRenderer<Context>;
+}
 
-		renderer.start(() => {
-			switch(this.state) {
-				case 'GENERATE':
-					renderer.speed = baseSpeed;
-					return this.handleGenerate();
-				case 'EXPLORE':
-					renderer.speed = baseSpeed;
-					return this.handleExplore();
-				case 'SEARCH_BACK':
-					renderer.speed = baseSpeed;
-					return this.handleSearchBack();
-				case 'WALK_BACK':
-					renderer.speed = baseSpeed / 10;
-					return this.handleWalkBack();
-				case 'TSP_PREPARE':
-					renderer.speed = baseSpeed / 10;
-					return this.handleTSPPrepare();
-				case 'TSP_SOLVE':
-					renderer.speed = baseSpeed * 10;
-					return this.handleTSPSolve();
-				case 'TSP_WALK':
-					renderer.speed = baseSpeed / 2;
-					return this.handleTSPWalk();
-			}
-		});
+class Runner {
+	start(renderer: CanvasRenderer<Context>, width: number, height: number, cities: number, walls: number) {
+		const context = new Context();
+		context.mapWidth = width;
+		context.mapHeight = height;
+		context.mapCities = cities;
+		context.mapWalls = walls;
+
+		context.renderer = renderer;
+		context.exploreGenerator = context.pathFinderGenerator = context.tspGenerator = context.mstGenerator = null;
+		context.completeTour = null;
+
+		const machine = new StateMachine<Context, CanvasRendererData>();
+		machine
+			.addState(GenerateState)
+			.addState(ExploreState)
+			.addTransition(GenerateState.name, ExploreState.name)
+			.addState(SearchBackState)
+			.addTransition(ExploreState.name, SearchBackState.name)
+			.addState(WalkBackState)
+			.addTransition(SearchBackState.name, WalkBackState.name)
+			.addState(TSPPrepareState)
+			.addTransition(WalkBackState.name, TSPPrepareState.name)
+			.addState(TSPSolveState)
+			.addTransition(TSPPrepareState.name, TSPSolveState.name)
+			.addState(TSPWalkState)
+			.addTransition(TSPSolveState.name, TSPWalkState.name)
+			.setInitialState(GenerateState.name);
+
+		renderer.start(machine, context);
 	}
+}
 
-	handleGenerate(): CanvasRendererData {
-		if (!this.generatorGenerator) {
-			this.generatorGenerator = this.generator.generateMapIteratively(this.mapWidth, this.mapHeight, this.mapCities, this.mapWalls);
-		}
-		const status = this.generatorGenerator.next();
+
+const GenerateState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'GENERATE',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed;
+		context.generatorGenerator = context.generator.generateMapIteratively(context.mapWidth, context.mapHeight, context.mapCities, context.mapWalls);
+	},
+	handlerFunc: (context) => {
+		const status = context.generatorGenerator.next();
 		if (!status.done && status.value) {
 			return {
-				map: this.generator.generatedMap,
+				map: context.generator.generatedMap,
 				currentNode: status.value.currentTile.coord,
 			}
 		} else {
-			this.map = this.generator.generatedMap;
-			this.salesmanStart = selectRandomCity(this.map).coord;
-			this.state = 'EXPLORE';
+			context.map = context.generator.generatedMap;
+			context.salesmanStart = selectRandomCity(context.map).coord;
+			return null;
 		}
 	}
+}
 
-	handleExplore(): CanvasRendererData {
-		if (!this.exploreGenerator) {
-			this.exploreGenerator = this.explorer.exploreMapIteratively(this.salesmanStart, this.map);
-		}
-		const status = this.exploreGenerator.next();
+const ExploreState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'EXPLORE',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed;
+		context.exploreGenerator = context.explorer.exploreMapIteratively(context.salesmanStart, context.map);
+	},
+	handlerFunc: (context) => {
+		const status = context.exploreGenerator.next();
 		if (!status.done && status.value) {
 			return {
-				map: this.explorer.blindMap,
-				currentNode: this.explorer.current,
-				backtrace: this.explorer.backTrace,
-				milestones: this.explorer.checkpointStack.getNodes()
+				map: context.explorer.blindMap,
+				currentNode: context.explorer.current,
+				backtrace: context.explorer.backTrace,
+				milestones: context.explorer.checkpointStack.getNodes()
 			}
 		} else {
-			this.state = 'SEARCH_BACK';
+			return null;
 		}
 	}
+}
 
-	handleSearchBack(): CanvasRendererData {
-		if (!this.pathFinderGenerator) {
-			this.pathFinderGenerator = this.pathFinder.findPathIteratively(this.explorer.current, this.salesmanStart, this.map);
-		}
-		const status = this.pathFinderGenerator.next();
+const SearchBackState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'SEARCH_BACK',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed;
+		context.pathFinderGenerator = context.pathFinder.findPathIteratively(context.explorer.current, context.salesmanStart, context.map);
+	},
+	handlerFunc: (context) => {
+		const status = context.pathFinderGenerator.next();
 		if (!status.done && status.value) {
 			return {
-				map: this.map,
-				currentNode: this.explorer.current,
-				backtrace: this.pathFinder.backTrace,
-				milestones: this.pathFinder.queue.getNodes()
+				map: context.map,
+				currentNode: context.explorer.current,
+				backtrace: context.pathFinder.backTrace,
+				milestones: context.pathFinder.queue.getNodes()
 			}
 		} else {
-			this.walkBack = this.pathFinder.closestPath;
-			this.walkBackIndex = 0;
-			this.state = 'WALK_BACK';
+			context.walkBack = context.pathFinder.closestPath;
+			context.walkBackIndex = 0;
+			return null;
 		}
 	}
+}
 
-	handleWalkBack(): CanvasRendererData {
-		if(this.walkBackIndex < this.walkBack.length) {
+const WalkBackState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'WALK_BACK',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed / 10;
+	},
+	handlerFunc: (context) => {
+		if(context.walkBackIndex < context.walkBack.length) {
 			return {
-				map: this.map,
-				currentNode: this.walkBack[this.walkBackIndex++],
-				backtrace: this.pathFinder.backTrace
+				map: context.map,
+				currentNode: context.walkBack[context.walkBackIndex++],
+				backtrace: context.pathFinder.backTrace
 			}
 		} else {
-			this.state = 'TSP_PREPARE';
+			return null;
 		}
 	}
+}
 
-	handleTSPPrepare(): CanvasRendererData {
-		if (!this.mstGenerator) {
-			const cities = this.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
-			this.mstGenerator = this.mst.findMSTIteratively(cities, this.map);
-		}
-		const status = this.mstGenerator.next();
+const TSPPrepareState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'TSP_PREPARE',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed / 10;
+		const cities = context.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+		context.mstGenerator = context.mst.findMSTIteratively(cities, context.map);
+	},
+	handlerFunc: (context) => {
+		const status = context.mstGenerator.next();
 		if (!status.done && status.value) {
 			return {
-				map: this.map,
+				map: context.map,
 				highlights: [status.value.currentCoord],
 				backtrace: status.value.minPath,
 			}
 		} else {
-			this.state = 'TSP_SOLVE';
+			return null;
 		}
 	}
+}
 
-	handleTSPSolve(): CanvasRendererData {
-		const cities = this.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
-		if (!this.tspGenerator) {
-			
-			const salesmanCity = cities.findIndex(c => coordEq(c, this.salesmanStart));
-			this.tspGenerator = this.tsp.solveIteratively(salesmanCity, cities.length, this.mst.spanningTree);
-		}
-		const status = this.tspGenerator.next();
+const TSPSolveState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'TSP_SOLVE',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed * 10;
+		const cities = context.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+		const salesmanCity = cities.findIndex(c => coordEq(c, context.salesmanStart));
+		context.tspGenerator = context.tsp.solveIteratively(salesmanCity, cities.length, context.mst.spanningTree);
+	},
+	handlerFunc: (context) => {
+		const cities = context.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+		const status = context.tspGenerator.next();
 		if (!status.done && status.value) {
 			return {
-				map: this.map,
+				map: context.map,
 				highlights: [cities[status.value.currentCity], cities[status.value.nextCity]],
 			}
 		} else {
-			this.state = 'TSP_WALK';
+			return null;
 		}
 	}
+}
 
-	handleTSPWalk(): CanvasRendererData {
-		if(!this.completeTour) {
-			this.completeTour = [];
-			this.completeTourIndex = 0;
-			const cities = this.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
-			
-			for(let i = 0; i < this.tsp.tour.length; i++) {
-				const cityFrom = cities[this.tsp.tour[i]];
-				const cityTo = cities[this.tsp.tour[(i !== (this.tsp.tour.length - 1)) ? (i + 1) : 0]];
-				const path = this.pathFinder.findPath(cityFrom, cityTo, this.map);
-				this.completeTour.push(...path);
-			}
+const TSPWalkState: State<Context, CanvasRendererData> & ContextState = {
+	name: 'TSP_WALK',
+	firstRun: (context) => {
+		context.renderer.speed = context.baseSpeed / 2;
+		context.completeTour = [];
+		context.completeTourIndex = 0;
+		const cities = context.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+		
+		for(let i = 0; i < context.tsp.tour.length; i++) {
+			const cityFrom = cities[context.tsp.tour[i]];
+			const cityTo = cities[context.tsp.tour[(i !== (context.tsp.tour.length - 1)) ? (i + 1) : 0]];
+			const path = context.pathFinder.findPath(cityFrom, cityTo, context.map);
+			context.completeTour.push(...path);
 		}
-
+	},
+	handlerFunc: (context) => {
 		const output = {
-			map: this.map,
-			currentNode: this.completeTour[this.completeTourIndex],
+			map: context.map,
+			currentNode: context.completeTour[context.completeTourIndex],
 		}
-		this.completeTourIndex = (this.completeTourIndex + 1) % this.completeTour.length;
+		context.completeTourIndex = (context.completeTourIndex + 1) % context.completeTour.length;
 		return output;
 	}
 }
 
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
-const renderer = new CanvasRenderer(canvas);
-const context = new Context();
-context.start(renderer, 10, 10, 10, 80);
+const renderer = new CanvasRenderer<Context>(canvas);
+const runner = new Runner();
+runner.start(renderer, 10, 10, 10, 80);
 
 const ui = new UIRenderer();
 ui.init(canvas, 10, 10);

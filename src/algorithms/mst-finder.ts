@@ -1,5 +1,5 @@
 import { MapGrid } from "../structs/map-grid";
-import { Coord, coordEq } from '../structs/coords';
+import { Coord, coordEq } from '../structs/coord';
 import { PathFinder } from './path-finder';
 
 export type MSTFinderEvent = {
