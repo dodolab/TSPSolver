@@ -1,5 +1,5 @@
-import { makeCoord } from '../Coord';
-import { MapExplorer } from '../MapExplorer';
+import { makeCoord } from '../structs/coords';
+import { MapExplorer } from '../algorithms/map-explorer';
 import { loadMapFromString } from '../utils';
 
 test('Will explore trivial solution', () => {
@@ -10,7 +10,7 @@ test('Will explore trivial solution', () => {
 	];
 
 	const map = loadMapFromString(arr, width, height);
-	const explorer = new MapExplorer(width, height);
+	const explorer = new MapExplorer();
 	explorer.exploreMap(makeCoord(0, 0), map);
 	// no unknown tiles
 	const unknownTiles = explorer.blindMap.mapArray.filter(arr => arr.type === 'UNKNOWN');
@@ -28,7 +28,7 @@ test('Will explore 2x2 solution', () => {
 	];
 
 	const map = loadMapFromString(arr, width, height);
-	const explorer = new MapExplorer(width, height);
+	const explorer = new MapExplorer();
 	explorer.exploreMap(makeCoord(0, 0), map);
 	// no unknown tiles
 	const unknownTiles = explorer.blindMap.mapArray.filter(arr => arr.type === 'UNKNOWN');
@@ -47,7 +47,7 @@ test('Will explore 3x3 solution with walls', () => {
 	];
 
 	const map = loadMapFromString(arr, width, height);
-	const explorer = new MapExplorer(width, height);
+	const explorer = new MapExplorer();
 	explorer.exploreMap(makeCoord(0, 0), map);
 	// no unknown tiles
 	const unknownTiles = explorer.blindMap.mapArray.filter(arr => arr.type === 'UNKNOWN');
@@ -67,7 +67,7 @@ test('Will explore 4x4 solution with inaccessible corner', () => {
 	];
 
 	const map = loadMapFromString(arr, width, height);
-	const explorer = new MapExplorer(width, height);
+	const explorer = new MapExplorer();
 	explorer.exploreMap(makeCoord(0, 0), map);
 	const unknownTiles = explorer.blindMap.mapArray.filter(arr => arr.type === 'UNKNOWN');
 	expect(unknownTiles).toHaveLength(0); // no unknown tiles, as we explored it diagonally
@@ -87,7 +87,7 @@ test('Will explore 5x5 solution with unexploreable parts', () => {
 	];
 
 	const map = loadMapFromString(arr, width, height);
-	const explorer = new MapExplorer(width, height);
+	const explorer = new MapExplorer();
 	explorer.exploreMap(makeCoord(0, 0), map);
 	const unknownTiles = explorer.blindMap.mapArray.filter(arr => arr.type === 'UNKNOWN');
 	expect(unknownTiles).toHaveLength(5);
@@ -112,7 +112,7 @@ test('Will explore 10x10 solution', () => {
 	];
 
 	const map = loadMapFromString(arr, width, height);
-	const explorer = new MapExplorer(width, height);
+	const explorer = new MapExplorer();
 	explorer.exploreMap(makeCoord(0, 0), map);
 	const unknownTiles = explorer.blindMap.mapArray.filter(arr => arr.type === 'UNKNOWN');
 	expect(unknownTiles).toHaveLength(0);

@@ -1,4 +1,4 @@
-import { PriorityQueue } from '../PriorityQueue';
+import { PriorityQueue } from '../structs/priority-queue';
 
 test('Will maintain the LIFO order for items with the same priority', () => {
 	const queue = new PriorityQueue<number>();

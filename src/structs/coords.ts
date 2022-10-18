@@ -79,3 +79,7 @@ export const isDirectionalNeighbor = (a: Coord, b: Coord) => {
 	const distY = Math.abs(a.y - b.y);
 	return distX <= 1 && distY <= 1 && distX !== distY;
 }
+
+export const manhattanDist = (a: Coord, b: Coord) => {
+	return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}

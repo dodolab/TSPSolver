@@ -1,6 +1,6 @@
-import { Coord, makeCoord } from '../Coord';
+import { makeCoord } from '../structs/coords';
 import { loadMapFromString } from '../utils';
-import { PathFinder } from '../PathFinder';
+import { PathFinder } from '../algorithms/path-finder';
 
 test('Will find path for trivial solution', () => {
 	const width = 1;

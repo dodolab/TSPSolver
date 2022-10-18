@@ -1,7 +1,7 @@
-import { Coord, makeCoord, coordEq, isDirectionalNeighbor } from './Coord';
-import { MapGrid } from './MapGrid';
-import { Stack } from './Stack';
-import { TileType, MapTile } from './MapTile';
+import { Coord, makeCoord, coordEq, isDirectionalNeighbor } from '../structs/coords';
+import { MapGrid } from '../structs/map-grid';
+import { Stack } from '../structs/stack-s';
+import { TileType, MapTile } from '../structs/map-tile';
 
 export type ExploreEvent = {
 	type: 'GOTO' | 'EXPLORE';
@@ -20,14 +20,6 @@ export class MapExplorer {
 	visitedNodes: Set<number>;
 	exploredNodes: Set<number>;
 
-	constructor(width: number, height: number) {
-		this.blindMap = new MapGrid(width, height);
-		for (let i = 0; i < width; i++) {
-			for (let j = 0; j < height; j++) {
-				this.blindMap.setTile(makeCoord(i, j), 'UNKNOWN');
-			}
-		}
-	}
 
 	exploreMap(startCoord: Coord, map: MapGrid): MapGrid {
 		const generator = this.exploreMapIteratively(startCoord, map);
@@ -40,7 +32,8 @@ export class MapExplorer {
 	}
 
 	*exploreMapIteratively(startCoord: Coord, map: MapGrid): Generator<ExploreEvent, ExploreEvent, void> {
-		this.reset();
+		this.reset(map.width, map.height);
+		
 		this.current = startCoord;
 
 		// visit the starting node
@@ -166,7 +159,14 @@ export class MapExplorer {
 	private coordToIndex = (coord: Coord): number => this.blindMap.coordToIndex(coord);
 	private indexToCoord = (index: number): Coord => this.blindMap.indexToCoord(index);
 
-	private reset() {
+	private reset(width: number, height: number) {
+		this.blindMap = new MapGrid(width, height);
+		for (let i = 0; i < width; i++) {
+			for (let j = 0; j < height; j++) {
+				this.blindMap.setTile(makeCoord(i, j), 'UNKNOWN');
+			}
+		}
+
 		this.backTrace = new Map();;
 		this.visitedNodes = new Set();
 		this.exploredNodes = new Set();

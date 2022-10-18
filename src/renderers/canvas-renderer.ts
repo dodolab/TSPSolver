@@ -1,26 +1,30 @@
-import { MapGrid } from './MapGrid';
-import { Coord, makeCoord, coordEq } from './Coord';
+import { MapGrid } from '../structs/map-grid';
+import { Coord, makeCoord } from '../structs/coords';
 
-export type RendererData = {
+export type CanvasRendererData = {
 	map: MapGrid;
-	highlights: Coord[];
+	highlights?: Coord[];
+	currentNode?: Coord;
 	backtrace?: Map<number, number>;
 	milestones?: Coord[];
 }
 
-export default class Renderer {
+export class CanvasRenderer {
 	lastFrameTime = 0;
 	lastTickTime = 0;
 	time = 0;
 	canvas: HTMLCanvasElement;
 	ctx: CanvasRenderingContext2D;
 	speed: number = 0.5;
-	tickHandler: () => RendererData;
+	tickHandler: () => CanvasRendererData;
 
-	init(canvas: HTMLCanvasElement, tickHandler: () => RendererData) {
+	constructor(canvas: HTMLCanvasElement) {
 		this.canvas = canvas;
-		this.tickHandler = tickHandler;
 		this.ctx = canvas.getContext('2d');
+	}
+
+	start(tickHandler: () => CanvasRendererData) {
+		this.tickHandler = tickHandler;
 		this.loop(performance.now());
 	}
 
@@ -34,16 +38,21 @@ export default class Renderer {
 		// for a higher speed, each loop can make more ticks
 		const iterations = Math.floor(this.speed * (this.lastFrameTime - this.lastTickTime) / 16);
 
-		for (let i = 0; i < iterations; i++) {
-			const data = this.tickHandler();
+		if(iterations > 0) {
+			let data = null;
+			for (let i = 0; i < iterations; i++) {
+				data = this.tickHandler();
+				this.lastTickTime = this.lastFrameTime;
+			}
+			// render only last data
 			this.renderData(data);
-			this.lastTickTime = this.lastFrameTime;
 		}
+			
 
 		requestAnimationFrame((time) => this.loop(time));
 	}
 
-	private renderData(data: RendererData) {
+	private renderData(data?: CanvasRendererData) {
 		if (!data) {
 			return;
 		}
@@ -54,7 +63,7 @@ export default class Renderer {
 			for (let j = 0; j < data.map.height; j++) {
 				const coord = makeCoord(i, j);
 				const tile = data.map.getTile(coord);
-				switch (tile.type) {
+				switch (tile?.type) {
 					case 'UNKNOWN':
 						this.ctx.fillStyle = '#11111155';
 						break;
@@ -65,7 +74,11 @@ export default class Renderer {
 						this.ctx.fillStyle = '#55555555';
 						break;
 					case 'CITY':
-						this.ctx.fillStyle = '#CD444455';
+						this.ctx.fillStyle = '#CDCD4466';
+						break;
+					default:
+						// if undefined, it's treated like unknown
+						this.ctx.fillStyle = '#11111155';
 						break;
 				}
 
@@ -73,14 +86,19 @@ export default class Renderer {
 
 				if (data.map.width < 30) {
 					this.ctx.font = `${blockSize * 0.25}px courier new`;
-					this.ctx.fillStyle = '#FFFFFF';
+					this.ctx.fillStyle = '#FFFFFF55';
 					this.ctx.fillText(`[${i},${j}]`, i * blockSize + blockSize * 0.10, j * blockSize + blockSize * 0.55);
 				}
 			}
 		}
 		
-		if(data.highlights) {
+		if(data.currentNode) {
 			this.ctx.fillStyle = '#EFEFEF';
+			this.ctx.fillRect(data.currentNode.x * blockSize, data.currentNode.y * blockSize, blockSize - 1, blockSize - 1);
+		}
+
+		if(data.highlights) {
+			this.ctx.fillStyle = '#0000FFAA';
 			for(let highlight of data.highlights) {
 				this.ctx.fillRect(highlight.x * blockSize, highlight.y * blockSize, blockSize - 1, blockSize - 1);
 			}
@@ -108,6 +126,5 @@ export default class Renderer {
 				this.ctx.fillRect(milestone.x * blockSize, milestone.y * blockSize, blockSize * 0.15, blockSize * 0.15);
 			}
 		}
-
 	}
 }

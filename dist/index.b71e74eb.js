@@ -532,339 +532,364 @@ function hmrAcceptRun(bundle, id) {
 }
 
 },{}],"h7u1C":[function(require,module,exports) {
-var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-var _mapGrid = require("./MapGrid");
-var _coord = require("./Coord");
-var _mapExplorer = require("./MapExplorer");
-var _pathFinder = require("./PathFinder");
-var _tsp = require("./TSP");
-var _renderer = require("./Renderer");
-var _rendererDefault = parcelHelpers.interopDefault(_renderer);
-// if bigger than 10x10, it will repeat the pattern from the map below
-let WIDTH = 10;
-let HEIGHT = 10;
-let arr = [
-    ".",
-    "o",
-    ".",
-    ".",
-    "o",
-    "x",
-    ".",
-    "o",
-    "x",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    "x",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    "x",
-    "x",
-    ".",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    "o",
-    ".",
-    "x",
-    "x",
-    ".",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    "x",
-    "o",
-    ".",
-    "x",
-    ".",
-    ".",
-    "o",
-    ".",
-    ".",
-    ".",
-    "x",
-    ".",
-    ".",
-    ".",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    "o",
-    "x",
-    "x",
-    ".",
-    ".",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    "x",
-    ".",
-    "x",
-    "x",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    ".",
-    "o",
-    ".",
-    ".",
-    ".",
-    "x",
-    ".",
-    "x",
-    "o",
-    ".",
-    ".", 
-];
-const realMap = new (0, _mapGrid.MapGrid)(WIDTH, HEIGHT);
-for(let i = 0; i < HEIGHT; i++)for(let j = 0; j < WIDTH; j++)// repeat pattern from the map above
-switch(arr[10 * (i % 10) + j % 10]){
-    case ".":
-        realMap.setTile((0, _coord.makeCoord)(j, i), "ROAD");
-        break;
-    case "x":
-        realMap.setTile((0, _coord.makeCoord)(j, i), "WALL");
-        break;
-    case "o":
-        realMap.setTile((0, _coord.makeCoord)(j, i), "CITY");
-        break;
-    default:
-        throw new Error("Unknown map tile");
-}
-realMap.generateNeighbors();
-const getStartingCity = ()=>{
-    console.log("Finding a starting city:");
-    const cities = realMap.mapArray.filter((a)=>a.type === "CITY").length;
-    console.log("Cities: " + cities);
-    const randomLoc = Math.floor(cities / 2);
-    let cnt = 0;
-    const cityTile = realMap.mapArray.find((val)=>val.type === "CITY" && ++cnt === randomLoc);
-    return cityTile;
-};
-const originalCoord = getStartingCity();
-const explorer = new (0, _mapExplorer.MapExplorer)(WIDTH, HEIGHT);
-const pathFinder = new (0, _pathFinder.PathFinder)();
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-let lastCoord = null;
-let exploreGenerator = null;
-let dijkstraGenerator = null;
-const tsp = new (0, _tsp.TSP)();
-let tspGenerator = null;
-let state = "EXPLORE";
-let distanceArray = null;
-let currentTourIndex = 0;
-new (0, _rendererDefault.default)().init(canvas, ()=>{
-    if (state === "EXPLORE") {
-        if (!exploreGenerator) exploreGenerator = explorer.exploreMapIteratively(originalCoord.coord, realMap);
-        const status = exploreGenerator.next();
-        if (!status.done && status.value) return {
-            map: explorer.blindMap,
-            highlights: [
-                explorer.current
-            ],
-            backtrace: explorer.backTrace,
-            milestones: explorer.checkpointStack.getNodes()
-        };
-        else state = "DIJKSTRA";
-    }
-    if (state === "DIJKSTRA") {
-        if (!dijkstraGenerator) dijkstraGenerator = pathFinder.findPathIteratively(explorer.current, originalCoord.coord, realMap);
-        const status1 = dijkstraGenerator.next();
-        if (!status1.done && status1.value) return {
-            map: realMap,
-            highlights: [
-                status1.value.currentCoord
-            ],
-            backtrace: pathFinder.backTrace,
-            milestones: pathFinder.queue.getNodes()
-        };
-        else state = "TSP_PREPARE";
-    }
-    if (state === "TSP_PREPARE") {
-        if (!distanceArray) distanceArray = [];
-        // now for the salesman problem:
-        // 1) for each city, run dijkstra
-        const cities = realMap.mapArray.filter((a)=>a.type === "CITY");
-        const refPoint = realMap.mapArray.find((a)=>a.type === "ROAD");
-        const pathFinder1 = new (0, _pathFinder.PathFinder)();
-        let cityIndex = 0;
-        let citiesCnt = cities.length;
-        for (let city of cities){
-            pathFinder1.findPath(city.coord, refPoint.coord, realMap);
-            const minSteps = pathFinder1.steps;
-            let city2Index = 0;
-            for (let city2 of cities){
-                // distance between CITY and CITY2
-                const distIndex = city2Index * citiesCnt + cityIndex;
-                distanceArray[distIndex] = minSteps[realMap.coordToIndex(city2.coord)];
-                city2Index++;
+var _structs = require("./structs");
+var _algorithms = require("./algorithms");
+var _utils = require("./utils");
+var _renderers = require("./renderers");
+class Context {
+    generator = new (0, _algorithms.MapGenerator)();
+    generatorGenerator = null;
+    explorer = new (0, _algorithms.MapExplorer)();
+    exploreGenerator = null;
+    pathFinder = new (0, _algorithms.PathFinder)();
+    pathFinderGenerator = null;
+    mst = new (0, _algorithms.MSTFinder)();
+    mstGenerator = null;
+    tsp = new (0, _algorithms.TSPSolver)();
+    tspGenerator = null;
+    start(renderer, width, height, cities, walls) {
+        this.mapWidth = width;
+        this.mapHeight = height;
+        this.mapCities = cities;
+        this.mapWalls = walls;
+        this.exploreGenerator = this.pathFinderGenerator = this.tspGenerator = this.mstGenerator = null;
+        this.completeTour = null;
+        this.state = "GENERATE";
+        const baseSpeed = renderer.speed;
+        renderer.start(()=>{
+            switch(this.state){
+                case "GENERATE":
+                    renderer.speed = baseSpeed;
+                    return this.handleGenerate();
+                case "EXPLORE":
+                    renderer.speed = baseSpeed;
+                    return this.handleExplore();
+                case "SEARCH_BACK":
+                    renderer.speed = baseSpeed;
+                    return this.handleSearchBack();
+                case "WALK_BACK":
+                    renderer.speed = baseSpeed / 10;
+                    return this.handleWalkBack();
+                case "TSP_PREPARE":
+                    renderer.speed = baseSpeed / 10;
+                    return this.handleTSPPrepare();
+                case "TSP_SOLVE":
+                    renderer.speed = baseSpeed * 10;
+                    return this.handleTSPSolve();
+                case "TSP_WALK":
+                    renderer.speed = baseSpeed / 2;
+                    return this.handleTSPWalk();
             }
-            cityIndex++;
-        }
-        state = "TSP";
+        });
     }
-    if (state === "TSP") {
-        const cities1 = realMap.mapArray.filter((a)=>a.type === "CITY");
-        if (!tspGenerator) {
-            const cityWhereWeAre = cities1.findIndex((c)=>(0, _coord.coordEq)(c.coord, originalCoord.coord));
-            tspGenerator = tsp.solveIteratively(cityWhereWeAre, cities1.length, distanceArray);
+    handleGenerate() {
+        if (!this.generatorGenerator) this.generatorGenerator = this.generator.generateMapIteratively(this.mapWidth, this.mapHeight, this.mapCities, this.mapWalls);
+        const status = this.generatorGenerator.next();
+        if (!status.done && status.value) return {
+            map: this.generator.generatedMap,
+            currentNode: status.value.currentTile.coord
+        };
+        else {
+            this.map = this.generator.generatedMap;
+            this.salesmanStart = (0, _utils.selectRandomCity)(this.map).coord;
+            this.state = "EXPLORE";
         }
-        const status2 = tspGenerator.next();
-        if (!status2.done && status2.value) return {
-            map: realMap,
+    }
+    handleExplore() {
+        if (!this.exploreGenerator) this.exploreGenerator = this.explorer.exploreMapIteratively(this.salesmanStart, this.map);
+        const status = this.exploreGenerator.next();
+        if (!status.done && status.value) return {
+            map: this.explorer.blindMap,
+            currentNode: this.explorer.current,
+            backtrace: this.explorer.backTrace,
+            milestones: this.explorer.checkpointStack.getNodes()
+        };
+        else this.state = "SEARCH_BACK";
+    }
+    handleSearchBack() {
+        if (!this.pathFinderGenerator) this.pathFinderGenerator = this.pathFinder.findPathIteratively(this.explorer.current, this.salesmanStart, this.map);
+        const status = this.pathFinderGenerator.next();
+        if (!status.done && status.value) return {
+            map: this.map,
+            currentNode: this.explorer.current,
+            backtrace: this.pathFinder.backTrace,
+            milestones: this.pathFinder.queue.getNodes()
+        };
+        else {
+            this.walkBack = this.pathFinder.closestPath;
+            this.walkBackIndex = 0;
+            this.state = "WALK_BACK";
+        }
+    }
+    handleWalkBack() {
+        if (this.walkBackIndex < this.walkBack.length) return {
+            map: this.map,
+            currentNode: this.walkBack[this.walkBackIndex++],
+            backtrace: this.pathFinder.backTrace
+        };
+        else this.state = "TSP_PREPARE";
+    }
+    handleTSPPrepare() {
+        if (!this.mstGenerator) {
+            const cities = this.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+            this.mstGenerator = this.mst.findMSTIteratively(cities, this.map);
+        }
+        const status = this.mstGenerator.next();
+        if (!status.done && status.value) return {
+            map: this.map,
             highlights: [
-                cities1[status2.value.currentCity].coord,
-                cities1[status2.value.nextCity].coord
+                status.value.currentCoord
+            ],
+            backtrace: status.value.minPath
+        };
+        else this.state = "TSP_SOLVE";
+    }
+    handleTSPSolve() {
+        const cities = this.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+        if (!this.tspGenerator) {
+            const salesmanCity = cities.findIndex((c)=>(0, _structs.coordEq)(c, this.salesmanStart));
+            this.tspGenerator = this.tsp.solveIteratively(salesmanCity, cities.length, this.mst.spanningTree);
+        }
+        const status = this.tspGenerator.next();
+        if (!status.done && status.value) return {
+            map: this.map,
+            highlights: [
+                cities[status.value.currentCity],
+                cities[status.value.nextCity]
             ]
         };
-        else state = "TSP_WALKTHROUGH";
+        else this.state = "TSP_WALK";
     }
-    state;
-    return null;
-});
-const initResizeHandler = ()=>{
-    resizeHandler();
-    window.addEventListener("resize", resizeHandler);
-};
-const resizeHandler = ()=>{
-    if (window.innerWidth > window.innerHeight) {
-        canvas.height = window.innerHeight;
-        canvas.width = canvas.height * (HEIGHT / WIDTH);
-    } else {
-        canvas.width = window.innerWidth;
-        canvas.height = canvas.width * (HEIGHT / WIDTH);
-    }
-};
-initResizeHandler();
-(function() {
-    const parent = document.querySelector(".range-slider");
-    const rangeS = parent.querySelectorAll('input[type="range"]'), numberS = parent.querySelectorAll('input[type="number"]');
-    rangeS.forEach((el)=>{
-        el.oninput = ()=>{
-            let slide1 = parseFloat(rangeS[0].value), slide2 = parseFloat(rangeS[1].value);
-            if (slide1 > slide2) [slide1, slide2] = [
-                slide2,
-                slide1
-            ];
-            numberS[0].value = `${slide1}`;
-            numberS[1].value = `${slide2}`;
-        };
-    });
-    numberS.forEach((el)=>{
-        el.oninput = ()=>{
-            let number1 = parseFloat(numberS[0].value), number2 = parseFloat(numberS[1].value);
-            if (number1 > number2) {
-                let tmp = number1;
-                numberS[0].value = `${number2}`;
-                numberS[1].value = `${tmp}`;
+    handleTSPWalk() {
+        if (!this.completeTour) {
+            this.completeTour = [];
+            this.completeTourIndex = 0;
+            const cities = this.map.mapArray.filter((a)=>a.type === "CITY").map((city)=>city.coord);
+            for(let i = 0; i < this.tsp.tour.length; i++){
+                const cityFrom = cities[this.tsp.tour[i]];
+                const cityTo = cities[this.tsp.tour[i !== this.tsp.tour.length - 1 ? i + 1 : 0]];
+                const path = this.pathFinder.findPath(cityFrom, cityTo, this.map);
+                this.completeTour.push(...path);
             }
-            rangeS[0].value = `${number1}`;
-            rangeS[1].value = `${number2}`;
+        }
+        const output = {
+            map: this.map,
+            currentNode: this.completeTour[this.completeTourIndex]
         };
-    });
-})(); // another ideas:
+        this.completeTourIndex = (this.completeTourIndex + 1) % this.completeTour.length;
+        return output;
+    }
+}
+const canvas = document.getElementById("gameCanvas");
+const renderer = new (0, _renderers.CanvasRenderer)(canvas);
+const context = new Context();
+context.start(renderer, 10, 10, 10, 80);
+const ui = new (0, _renderers.UIRenderer)();
+ui.init(canvas, 10, 10); // another ideas:
  // https://en.wikipedia.org/wiki/Flood_fill
  // https://gamedev.stackexchange.com/questions/55344/algorithm-for-exploring-filling-grid-map
 
-},{"./MapGrid":"5i7Xm","./Coord":"hANUT","./MapExplorer":"fzWxn","./PathFinder":"i3Uq0","./TSP":"j9PIn","./Renderer":"b6fOg","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"5i7Xm":[function(require,module,exports) {
+},{"./utils":"dsXzW","./structs":"iTVbw","./algorithms":"03p2T","./renderers":"cdoPD"}],"dsXzW":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-/**
- * 2D map structure
- */ parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
-var _coord = require("./Coord");
-var _mapTile = require("./MapTile");
-class MapGrid {
-    mapArray = [];
-    neighborsGenerated = false;
-    constructor(width, height){
-        this.width = width;
-        this.height = height;
+parcelHelpers.export(exports, "loadMapFromString", ()=>loadMapFromString);
+parcelHelpers.export(exports, "generateDefaultMap", ()=>generateDefaultMap);
+parcelHelpers.export(exports, "selectRandomCity", ()=>selectRandomCity);
+var _structs = require("./structs");
+const loadMapFromString = (arr, width, height)=>{
+    const map = new (0, _structs.MapGrid)(width, height);
+    for(let i = 0; i < height; i++)for(let j = 0; j < width; j++)// repeat pattern from the map above
+    switch(arr[i * width + j]){
+        case ".":
+            map.setTile((0, _structs.makeCoord)(j, i), "ROAD");
+            break;
+        case "x":
+            map.setTile((0, _structs.makeCoord)(j, i), "WALL");
+            break;
+        case "o":
+            map.setTile((0, _structs.makeCoord)(j, i), "CITY");
+            break;
+        default:
+            throw new Error("Unknown map tile");
     }
-    coordToIndex = (coord)=>{
-        const { x , y  } = coord;
-        if (x < 0 || y < 0 || x >= this.width || y >= this.height) throw new Error(`Coordinate [${coord.x},${coord.y}] outside the boundaries!`);
-        return y * this.width + x;
-    };
-    indexToCoord = (x)=>{
-        return (0, _coord.makeCoord)(x % this.width, Math.floor(x / this.width));
-    };
-    isInsideMap = (coord)=>{
-        return coord.x >= 0 && coord.y >= 0 && coord.x < this.width && coord.y < this.height;
-    };
-    getTile(coord) {
-        if (!this.isInsideMap(coord)) return null;
-        return this.mapArray[this.coordToIndex(coord)];
+    map.generateNeighbors();
+    return map;
+};
+const generateDefaultMap = (width, height)=>{
+    // if the width or height > 10, the pattern below will repeat
+    let arr = [
+        ".",
+        "o",
+        ".",
+        ".",
+        "o",
+        "x",
+        ".",
+        "o",
+        "x",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        "x",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        "x",
+        "x",
+        ".",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        "o",
+        ".",
+        "x",
+        "x",
+        ".",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        "x",
+        "o",
+        ".",
+        "x",
+        ".",
+        ".",
+        "o",
+        ".",
+        ".",
+        ".",
+        "x",
+        ".",
+        ".",
+        ".",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        "o",
+        "x",
+        "x",
+        ".",
+        ".",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        "x",
+        ".",
+        "x",
+        "x",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        ".",
+        "o",
+        ".",
+        ".",
+        ".",
+        "x",
+        ".",
+        "x",
+        "o",
+        ".",
+        ".", 
+    ];
+    const map = new (0, _structs.MapGrid)(width, height);
+    for(let i = 0; i < height; i++)for(let j = 0; j < width; j++)// repeat pattern from the map above
+    switch(arr[10 * (i % 10) + j % 10]){
+        case ".":
+            map.setTile((0, _structs.makeCoord)(j, i), "ROAD");
+            break;
+        case "x":
+            map.setTile((0, _structs.makeCoord)(j, i), "WALL");
+            break;
+        case "o":
+            map.setTile((0, _structs.makeCoord)(j, i), "CITY");
+            break;
+        default:
+            throw new Error("Unknown map tile");
     }
-    setTile(coord, type) {
-        this.mapArray[this.coordToIndex(coord)] = new (0, _mapTile.MapTile)(coord, type);
-    }
-    generateNeighbors() {
-        for (let tile of this.mapArray){
-            // this structure is not actually needed
-            tile.neighbors = {
-                left: this.getTile((0, _coord.coordLeft)(tile.coord)),
-                right: this.getTile((0, _coord.coordRight)(tile.coord)),
-                top: this.getTile((0, _coord.coordTop)(tile.coord)),
-                bottom: this.getTile((0, _coord.coordBottom)(tile.coord)),
-                topLeft: this.getTile((0, _coord.coordTopLeft)(tile.coord)),
-                topRight: this.getTile((0, _coord.coordTopRight)(tile.coord)),
-                bottomLeft: this.getTile((0, _coord.coordBottomLeft)(tile.coord)),
-                bottomRight: this.getTile((0, _coord.coordBottomRight)(tile.coord))
-            };
-            // this order is very important
-            tile.directionalNeighbors = [
-                tile.neighbors.top,
-                tile.neighbors.left,
-                tile.neighbors.bottom,
-                tile.neighbors.right
-            ];
-            tile.neighborsArr = [
-                tile.neighbors.top,
-                tile.neighbors.left,
-                tile.neighbors.bottom,
-                tile.neighbors.right,
-                tile.neighbors.topLeft,
-                tile.neighbors.topRight,
-                tile.neighbors.bottomLeft,
-                tile.neighbors.bottomRight
-            ];
-        }
-        this.neighborsGenerated = true;
-    }
-}
+    map.generateNeighbors();
+    return map;
+};
+const selectRandomCity = (map)=>{
+    const cities = map.mapArray.filter((a)=>a.type === "CITY").length;
+    const randomLoc = Math.ceil(cities / 2);
+    let cnt = 0;
+    const cityTile = map.mapArray.find((val)=>val.type === "CITY" && ++cnt === randomLoc);
+    return cityTile;
+};
 
-},{"./Coord":"hANUT","./MapTile":"4h6t3","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hANUT":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./structs":"iTVbw"}],"gkKU3":[function(require,module,exports) {
+exports.interopDefault = function(a) {
+    return a && a.__esModule ? a : {
+        default: a
+    };
+};
+exports.defineInteropFlag = function(a) {
+    Object.defineProperty(a, "__esModule", {
+        value: true
+    });
+};
+exports.exportAll = function(source, dest) {
+    Object.keys(source).forEach(function(key) {
+        if (key === "default" || key === "__esModule" || dest.hasOwnProperty(key)) return;
+        Object.defineProperty(dest, key, {
+            enumerable: true,
+            get: function() {
+                return source[key];
+            }
+        });
+    });
+    return dest;
+};
+exports.export = function(dest, destName, get) {
+    Object.defineProperty(dest, destName, {
+        enumerable: true,
+        get: get
+    });
+};
+
+},{}],"iTVbw":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+var _coords = require("./coords");
+parcelHelpers.exportAll(_coords, exports);
+var _mapGrid = require("./map-grid");
+parcelHelpers.exportAll(_mapGrid, exports);
+var _mapTile = require("./map-tile");
+parcelHelpers.exportAll(_mapTile, exports);
+var _priorityQueue = require("./priority-queue");
+parcelHelpers.exportAll(_priorityQueue, exports);
+var _stackS = require("./stack-s");
+parcelHelpers.exportAll(_stackS, exports);
+
+},{"./coords":"jEQI2","./map-grid":"5C0ri","./map-tile":"NGSV0","./priority-queue":"ahez4","./stack-s":"86TvF","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"jEQI2":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "makeCoord", ()=>makeCoord);
@@ -878,6 +903,7 @@ parcelHelpers.export(exports, "coordTopRight", ()=>coordTopRight);
 parcelHelpers.export(exports, "coordBottomLeft", ()=>coordBottomLeft);
 parcelHelpers.export(exports, "coordBottomRight", ()=>coordBottomRight);
 parcelHelpers.export(exports, "isDirectionalNeighbor", ()=>isDirectionalNeighbor);
+parcelHelpers.export(exports, "manhattanDist", ()=>manhattanDist);
 const makeCoord = (x, y)=>{
     return {
         x,
@@ -940,38 +966,79 @@ const isDirectionalNeighbor = (a, b)=>{
     const distY = Math.abs(a.y - b.y);
     return distX <= 1 && distY <= 1 && distX !== distY;
 };
+const manhattanDist = (a, b)=>{
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+};
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"gkKU3":[function(require,module,exports) {
-exports.interopDefault = function(a) {
-    return a && a.__esModule ? a : {
-        default: a
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"5C0ri":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+/**
+ * 2D map structure
+ */ parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
+var _coords = require("./coords");
+var _mapTile = require("./map-tile");
+class MapGrid {
+    mapArray = [];
+    neighborsGenerated = false;
+    constructor(width, height){
+        this.width = width;
+        this.height = height;
+    }
+    coordToIndex = (coord)=>{
+        const { x , y  } = coord;
+        if (x < 0 || y < 0 || x >= this.width || y >= this.height) throw new Error(`Coordinate [${coord.x},${coord.y}] outside the boundaries!`);
+        return y * this.width + x;
     };
-};
-exports.defineInteropFlag = function(a) {
-    Object.defineProperty(a, "__esModule", {
-        value: true
-    });
-};
-exports.exportAll = function(source, dest) {
-    Object.keys(source).forEach(function(key) {
-        if (key === "default" || key === "__esModule" || dest.hasOwnProperty(key)) return;
-        Object.defineProperty(dest, key, {
-            enumerable: true,
-            get: function() {
-                return source[key];
-            }
-        });
-    });
-    return dest;
-};
-exports.export = function(dest, destName, get) {
-    Object.defineProperty(dest, destName, {
-        enumerable: true,
-        get: get
-    });
-};
+    indexToCoord = (x)=>{
+        return (0, _coords.makeCoord)(x % this.width, Math.floor(x / this.width));
+    };
+    isInsideMap = (coord)=>{
+        return coord.x >= 0 && coord.y >= 0 && coord.x < this.width && coord.y < this.height;
+    };
+    getTile(coord) {
+        if (!this.isInsideMap(coord)) return null;
+        return this.mapArray[this.coordToIndex(coord)];
+    }
+    setTile(coord, type) {
+        this.mapArray[this.coordToIndex(coord)] = new (0, _mapTile.MapTile)(coord, type);
+    }
+    generateNeighbors() {
+        for (let tile of this.mapArray){
+            // this structure is not actually needed
+            tile.neighbors = {
+                left: this.getTile((0, _coords.coordLeft)(tile.coord)),
+                right: this.getTile((0, _coords.coordRight)(tile.coord)),
+                top: this.getTile((0, _coords.coordTop)(tile.coord)),
+                bottom: this.getTile((0, _coords.coordBottom)(tile.coord)),
+                topLeft: this.getTile((0, _coords.coordTopLeft)(tile.coord)),
+                topRight: this.getTile((0, _coords.coordTopRight)(tile.coord)),
+                bottomLeft: this.getTile((0, _coords.coordBottomLeft)(tile.coord)),
+                bottomRight: this.getTile((0, _coords.coordBottomRight)(tile.coord))
+            };
+            // this order is very important
+            tile.directionalNeighbors = [
+                tile.neighbors.top,
+                tile.neighbors.left,
+                tile.neighbors.bottom,
+                tile.neighbors.right
+            ];
+            tile.neighborsArr = [
+                tile.neighbors.top,
+                tile.neighbors.left,
+                tile.neighbors.bottom,
+                tile.neighbors.right,
+                tile.neighbors.topLeft,
+                tile.neighbors.topRight,
+                tile.neighbors.bottomLeft,
+                tile.neighbors.bottomRight
+            ];
+        }
+        this.neighborsGenerated = true;
+    }
+}
 
-},{}],"4h6t3":[function(require,module,exports) {
+},{"./coords":"jEQI2","./map-tile":"NGSV0","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"NGSV0":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 /**
@@ -987,141 +1054,46 @@ class MapTile {
     }
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"fzWxn":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"ahez4":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "MapExplorer", ()=>MapExplorer);
-var _coord = require("./Coord");
-var _mapGrid = require("./MapGrid");
-var _stack = require("./Stack");
-class MapExplorer {
-    constructor(width, height){
-        this.blindMap = new (0, _mapGrid.MapGrid)(width, height);
-        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++)this.blindMap.setTile((0, _coord.makeCoord)(i, j), "UNKNOWN");
-    }
-    exploreMap(startCoord, map) {
-        const generator = this.exploreMapIteratively(startCoord, map);
-        let val = generator.next();
-        while(!val.done)val = generator.next();
-        // return explored map
-        return this.blindMap;
-    }
-    *exploreMapIteratively(startCoord, map) {
-        this.reset();
-        this.current = startCoord;
-        // visit the starting node
-        this.exploreTile(startCoord, map.getTile(startCoord).type);
-        this.visitNewNode(startCoord);
-        this.checkpointStack.push(this.current);
-        // we go forward and when we need to go back, we will use the stack
-        let canWalkForward = false;
-        while(!this.checkpointStack.isEmpty() || canWalkForward){
-            if (!canWalkForward) {
-                let lastCheckpoint = this.checkpointStack.pop();
-                // a little twist -> this will ignore milestones around which all cells have already been discovered
-                while(!map.getTile(lastCheckpoint).directionalNeighbors.find((neigh)=>neigh && neigh.isWalkable && !this.isVisited(neigh.coord))){
-                    if (this.checkpointStack.isEmpty()) // algorithm termination
-                    return null;
-                    lastCheckpoint = this.checkpointStack.pop();
-                }
-                const pathToLastCheckpoint = this.addToBackTrace(lastCheckpoint);
-                //walk to the last checkpoint
-                for (let coord of pathToLastCheckpoint){
-                    this.current = coord;
-                    yield {
-                        type: "GOTO",
-                        tile: map.getTile(coord)
-                    };
-                }
-            }
-            let currentTile = map.getTile(this.current);
-            // this order is important!
-            const neighbors = currentTile.neighborsArr;
-            let neighbourToWalk = null;
-            let neighboursToWalkCnt = 0;
-            for (let neigh of neighbors)// if we are close to map boundaries, some neighbours can be undefined 
-            if (neigh) {
-                if (!this.isExplored(neigh.coord)) {
-                    this.exploreTile(neigh.coord, neigh.type);
-                    yield {
-                        type: "EXPLORE",
-                        tile: neigh
-                    };
-                }
-                if (neigh.isWalkable && (0, _coord.isDirectionalNeighbor)(neigh.coord, this.current) && !this.isVisited(neigh.coord)) {
-                    neighbourToWalk = neigh.coord;
-                    neighboursToWalkCnt++;
-                }
-            }
-            if (neighboursToWalkCnt > 1) // more than one neighbour -> we need to save a checkpoint
-            // for backtracking
-            this.checkpointStack.push(this.current);
-            if (neighbourToWalk) {
-                canWalkForward = true;
-                this.visitNewNode(neighbourToWalk);
-                yield {
-                    type: "GOTO",
-                    tile: map.getTile(neighbourToWalk)
-                };
-            } else canWalkForward = false;
-        }
-        // generate neighbours as we have already discovered all cells
-        this.blindMap.generateNeighbors();
-        return null;
-    }
-    addToBackTrace(target) {
-        if ((0, _coord.coordEq)(target, this.current)) // trivial solution -> staying on the same place
-        return [
-            target
-        ];
-        if (this.blindMap.getTile(target).type === "UNKNOWN") throw new Error(`Can\'t walk to an unknown area: [${target.x},${target.y}]`);
-        if ((0, _coord.isDirectionalNeighbor)(target, this.current)) // semi-trivial solution - going one cell back
-        return [
-            target
-        ];
+parcelHelpers.export(exports, "PriorityQueue", ()=>PriorityQueue);
+class PriorityQueue {
+    collection = [];
+    enqueue(element, priority = 0) {
+        if (this.isEmpty) this.collection.push([
+            element,
+            priority
+        ]);
         else {
-            // iterative backtracking
-            const path = [];
-            let nextStep = this.backTrace.get(this.coordToIndex(this.current));
-            const toIndex = this.coordToIndex(target);
-            let overFlowCheck = 0;
-            while(true){
-                path.push(this.indexToCoord(nextStep));
-                if (nextStep === toIndex) break;
-                nextStep = this.backTrace.get(nextStep);
-                if ((overFlowCheck++) >= this.blindMap.width * this.blindMap.height) throw new Error(`Backtrace got in an infinite loop for [${target.x},${target.y}]`);
+            let added = false;
+            for(let i = 1; i <= this.collection.length; i++)if (priority < this.collection[i - 1][1]) {
+                this.collection.splice(i - 1, 0, [
+                    element,
+                    priority
+                ]);
+                added = true;
+                break;
             }
-            return path;
+            if (!added) this.collection.push([
+                element,
+                priority
+            ]);
         }
     }
-    coordToIndex = (coord)=>this.blindMap.coordToIndex(coord);
-    indexToCoord = (index)=>this.blindMap.indexToCoord(index);
-    reset() {
-        this.backTrace = new Map();
-        this.visitedNodes = new Set();
-        this.exploredNodes = new Set();
-        this.blindMap.generateNeighbors();
-        this.checkpointStack = new (0, _stack.Stack)();
+    getNodes() {
+        return this.collection.map((c)=>c[0]);
     }
-    isVisited(coord) {
-        return this.visitedNodes.has(this.coordToIndex(coord));
+    dequeue() {
+        let value = this.collection.shift();
+        return value[0];
     }
-    visitNewNode(coord) {
-        this.visitedNodes.add(this.coordToIndex(coord));
-        if (!(0, _coord.coordEq)(this.current, coord)) // update backtrack
-        this.backTrace.set(this.coordToIndex(coord), this.coordToIndex(this.current));
-        this.current = coord;
-    }
-    isExplored(coord) {
-        return this.exploredNodes.has(this.coordToIndex(coord));
-    }
-    exploreTile(coord, type) {
-        this.blindMap.setTile(coord, type);
-        this.exploredNodes.add(this.coordToIndex(coord));
+    get isEmpty() {
+        return this.collection.length === 0;
     }
 }
 
-},{"./Coord":"hANUT","./MapGrid":"5i7Xm","./Stack":"2i5YS","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"2i5YS":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"86TvF":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 /**
@@ -1163,14 +1135,338 @@ class Stack {
     }
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"i3Uq0":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"03p2T":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+var _mapExplorer = require("./map-explorer");
+parcelHelpers.exportAll(_mapExplorer, exports);
+var _mapGenerator = require("./map-generator");
+parcelHelpers.exportAll(_mapGenerator, exports);
+var _mstFinder = require("./mst-finder");
+parcelHelpers.exportAll(_mstFinder, exports);
+var _pathFinder = require("./path-finder");
+parcelHelpers.exportAll(_pathFinder, exports);
+var _randomGenerator = require("./random-generator");
+parcelHelpers.exportAll(_randomGenerator, exports);
+var _tspSolver = require("./tsp-solver");
+parcelHelpers.exportAll(_tspSolver, exports);
+
+},{"./map-explorer":"9xSVq","./map-generator":"kxZIA","./mst-finder":"oRysF","./path-finder":"zPxe2","./random-generator":"iGQAv","./tsp-solver":"ddrBY","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"9xSVq":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "MapExplorer", ()=>MapExplorer);
+var _coords = require("../structs/coords");
+var _mapGrid = require("../structs/map-grid");
+var _stackS = require("../structs/stack-s");
+class MapExplorer {
+    exploreMap(startCoord, map) {
+        const generator = this.exploreMapIteratively(startCoord, map);
+        let val = generator.next();
+        while(!val.done)val = generator.next();
+        // return explored map
+        return this.blindMap;
+    }
+    *exploreMapIteratively(startCoord, map) {
+        this.reset(map.width, map.height);
+        this.current = startCoord;
+        // visit the starting node
+        this.exploreTile(startCoord, map.getTile(startCoord).type);
+        this.visitNewNode(startCoord);
+        this.checkpointStack.push(this.current);
+        // we go forward and when we need to go back, we will use the stack
+        let canWalkForward = false;
+        while(!this.checkpointStack.isEmpty() || canWalkForward){
+            if (!canWalkForward) {
+                let lastCheckpoint = this.checkpointStack.pop();
+                // a little twist -> this will ignore milestones around which all cells have already been discovered
+                while(!map.getTile(lastCheckpoint).directionalNeighbors.find((neigh)=>neigh && neigh.isWalkable && !this.isVisited(neigh.coord))){
+                    if (this.checkpointStack.isEmpty()) // algorithm termination
+                    return null;
+                    lastCheckpoint = this.checkpointStack.pop();
+                }
+                const pathToLastCheckpoint = this.addToBackTrace(lastCheckpoint);
+                //walk to the last checkpoint
+                for (let coord of pathToLastCheckpoint){
+                    this.current = coord;
+                    yield {
+                        type: "GOTO",
+                        tile: map.getTile(coord)
+                    };
+                }
+            }
+            let currentTile = map.getTile(this.current);
+            // this order is important!
+            const neighbors = currentTile.neighborsArr;
+            let neighbourToWalk = null;
+            let neighboursToWalkCnt = 0;
+            for (let neigh of neighbors)// if we are close to map boundaries, some neighbours can be undefined 
+            if (neigh) {
+                if (!this.isExplored(neigh.coord)) {
+                    this.exploreTile(neigh.coord, neigh.type);
+                    yield {
+                        type: "EXPLORE",
+                        tile: neigh
+                    };
+                }
+                if (neigh.isWalkable && (0, _coords.isDirectionalNeighbor)(neigh.coord, this.current) && !this.isVisited(neigh.coord)) {
+                    neighbourToWalk = neigh.coord;
+                    neighboursToWalkCnt++;
+                }
+            }
+            if (neighboursToWalkCnt > 1) // more than one neighbour -> we need to save a checkpoint
+            // for backtracking
+            this.checkpointStack.push(this.current);
+            if (neighbourToWalk) {
+                canWalkForward = true;
+                this.visitNewNode(neighbourToWalk);
+                yield {
+                    type: "GOTO",
+                    tile: map.getTile(neighbourToWalk)
+                };
+            } else canWalkForward = false;
+        }
+        // generate neighbours as we have already discovered all cells
+        this.blindMap.generateNeighbors();
+        return null;
+    }
+    addToBackTrace(target) {
+        if ((0, _coords.coordEq)(target, this.current)) // trivial solution -> staying on the same place
+        return [
+            target
+        ];
+        if (this.blindMap.getTile(target).type === "UNKNOWN") throw new Error(`Can\'t walk to an unknown area: [${target.x},${target.y}]`);
+        if ((0, _coords.isDirectionalNeighbor)(target, this.current)) // semi-trivial solution - going one cell back
+        return [
+            target
+        ];
+        else {
+            // iterative backtracking
+            const path = [];
+            let nextStep = this.backTrace.get(this.coordToIndex(this.current));
+            const toIndex = this.coordToIndex(target);
+            let overFlowCheck = 0;
+            while(true){
+                path.push(this.indexToCoord(nextStep));
+                if (nextStep === toIndex) break;
+                nextStep = this.backTrace.get(nextStep);
+                if ((overFlowCheck++) >= this.blindMap.width * this.blindMap.height) throw new Error(`Backtrace got in an infinite loop for [${target.x},${target.y}]`);
+            }
+            return path;
+        }
+    }
+    coordToIndex = (coord)=>this.blindMap.coordToIndex(coord);
+    indexToCoord = (index)=>this.blindMap.indexToCoord(index);
+    reset(width, height) {
+        this.blindMap = new (0, _mapGrid.MapGrid)(width, height);
+        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++)this.blindMap.setTile((0, _coords.makeCoord)(i, j), "UNKNOWN");
+        this.backTrace = new Map();
+        this.visitedNodes = new Set();
+        this.exploredNodes = new Set();
+        this.blindMap.generateNeighbors();
+        this.checkpointStack = new (0, _stackS.Stack)();
+    }
+    isVisited(coord) {
+        return this.visitedNodes.has(this.coordToIndex(coord));
+    }
+    visitNewNode(coord) {
+        this.visitedNodes.add(this.coordToIndex(coord));
+        if (!(0, _coords.coordEq)(this.current, coord)) // update backtrack
+        this.backTrace.set(this.coordToIndex(coord), this.coordToIndex(this.current));
+        this.current = coord;
+    }
+    isExplored(coord) {
+        return this.exploredNodes.has(this.coordToIndex(coord));
+    }
+    exploreTile(coord, type) {
+        this.blindMap.setTile(coord, type);
+        this.exploredNodes.add(this.coordToIndex(coord));
+    }
+}
+
+},{"../structs/coords":"jEQI2","../structs/map-grid":"5C0ri","../structs/stack-s":"86TvF","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"kxZIA":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "MapGenerator", ()=>MapGenerator);
+var _mapGrid = require("../structs/map-grid");
+var _coords = require("../structs/coords");
+var _mapExplorer = require("./map-explorer");
+var _randomGenerator = require("./random-generator");
+var _randomGeneratorDefault = parcelHelpers.interopDefault(_randomGenerator);
+class MapGenerator {
+    constructor(randomSeed = 17){
+        this.randomSeed = randomSeed;
+    }
+    generateMap(width, height, cities, walls) {
+        const generator = this.generateMapIteratively(width, height, cities, walls);
+        let val = generator.next();
+        while(!val.done)val = generator.next();
+        return this.generatedMap;
+    }
+    *generateMapIteratively(width, height, cities, walls) {
+        this.generatedMap = new (0, _mapGrid.MapGrid)(width, height);
+        const random = new (0, _randomGeneratorDefault.default)(this.randomSeed);
+        // start with roads
+        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++){
+            this.generatedMap.setTile((0, _coords.makeCoord)(i, j), "ROAD");
+            yield {
+                currentTile: this.generatedMap.getTile((0, _coords.makeCoord)(i, j))
+            };
+        }
+        this.generatedMap.generateNeighbors();
+        // put walls
+        let wallsPut = 0;
+        let iteration = 0;
+        while(wallsPut < walls){
+            const tilesWithoutWalls = this.generatedMap.mapArray.filter((tile)=>tile.type !== "WALL");
+            if (tilesWithoutWalls.length === 0) break;
+            const randomTile = tilesWithoutWalls[Math.floor(random.float() * tilesWithoutWalls.length)];
+            const wallsNearby = randomTile.directionalNeighbors.filter((neigh)=>neigh && neigh.type === "WALL").length;
+            // the more walls nearby, the higher the probability to put it exactly here
+            // 93% for 8 neighbours, 83% for 7, ... 33% for 2, 23% for 1, 13% for 0
+            const putWall = Math.floor(random.float() * 10) <= (wallsNearby * 1.5 + 2) / 1.5;
+            if (putWall) {
+                this.generatedMap.setTile(randomTile.coord, "WALL");
+                this.generatedMap.generateNeighbors(); // regenerate links
+                wallsPut++;
+                yield {
+                    currentTile: this.generatedMap.getTile(randomTile.coord)
+                };
+            }
+            if ((iteration++) > width * height * 4) break;
+        }
+        // put cities
+        let citiesPut = 0;
+        iteration = 0;
+        while(citiesPut < cities){
+            const tilesWithoutCities = this.generatedMap.mapArray.filter((tile)=>tile.type !== "CITY" && tile.type !== "WALL");
+            if (tilesWithoutCities.length === 0) break;
+            const randomTile1 = tilesWithoutCities[Math.floor(random.float() * tilesWithoutCities.length)];
+            const citiesNearby = randomTile1.directionalNeighbors.filter((neigh)=>neigh && neigh.type === "CITY").length;
+            // the more cities nearby, the lower the probability to put it exactly here
+            // 100% for 0 neighbours, 40% for 1 neighbour, 0% for 2 and more 
+            const putCity = Math.floor(random.float() * 10) >= citiesNearby * 6;
+            if (putCity) {
+                this.generatedMap.setTile(randomTile1.coord, "CITY");
+                this.generatedMap.generateNeighbors(); // regenerate links
+                citiesPut++;
+                yield {
+                    currentTile: this.generatedMap.getTile(randomTile1.coord)
+                };
+            }
+            if ((iteration++) > width * height) break;
+        }
+        // brute-force test if all cities can be visited
+        const explorer = new (0, _mapExplorer.MapExplorer)();
+        const firstCityCoord = this.generatedMap.mapArray.filter((tile)=>tile.type === "CITY")[0].coord;
+        const cityTiles = this.generatedMap.mapArray.filter((tile)=>tile.type === "CITY");
+        explorer.exploreMap(firstCityCoord, this.generatedMap);
+        let lockedCities = cityTiles.filter((tile)=>!explorer.visitedNodes.has(this.generatedMap.coordToIndex(tile.coord)));
+        while(lockedCities.length !== 0){
+            // search for walls that have neighbours that were not visited
+            // and sort them from closest to the starting node
+            const allWalls = this.generatedMap.mapArray.filter((tile)=>tile.type === "WALL");
+            const suspiciousWalls = allWalls.filter((wall)=>wall.neighborsArr.find((neigh)=>neigh && neigh.isWalkable && !explorer.visitedNodes.has(this.generatedMap.coordToIndex(neigh.coord)))).sort((a, b)=>(0, _coords.manhattanDist)(a.coord, firstCityCoord) - (0, _coords.manhattanDist)(b.coord, firstCityCoord));
+            if (suspiciousWalls.length > 0) {
+                // remove the closest suspicious wall
+                const wallToRemove = suspiciousWalls[0];
+                // transform to roads
+                this.generatedMap.setTile(wallToRemove.coord, "ROAD");
+                yield {
+                    currentTile: this.generatedMap.getTile(wallToRemove.coord)
+                };
+                // refresh
+                this.generatedMap.generateNeighbors();
+                explorer.exploreMap(firstCityCoord, this.generatedMap);
+                lockedCities = cityTiles.filter((tile)=>!explorer.visitedNodes.has(this.generatedMap.coordToIndex(tile.coord)));
+            } else // should not happen, but if it does, we will just remove the cities
+            for (let lockedCity of lockedCities){
+                this.generatedMap.setTile(lockedCity.coord, "ROAD");
+                this.generatedMap.generateNeighbors();
+                yield {
+                    currentTile: this.generatedMap.getTile(lockedCity.coord)
+                };
+            }
+        }
+        this.generatedMap.generateNeighbors();
+        return null;
+    }
+}
+
+},{"../structs/map-grid":"5C0ri","../structs/coords":"jEQI2","./map-explorer":"9xSVq","./random-generator":"iGQAv","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"iGQAv":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+class Random {
+    mask = 0xffffffff;
+    constructor(seed){
+        this.m_w = 123456789 + seed & this.mask;
+        this.m_z = 987654321 - seed & this.mask;
+    }
+    float() {
+        this.m_z = 36969 * (this.m_z & 65535) + (this.m_z >> 16) & this.mask;
+        this.m_w = 18000 * (this.m_w & 65535) + (this.m_w >> 16) & this.mask;
+        let result = (this.m_z << 16) + (this.m_w & 65535) >>> 0;
+        result /= 4294967296;
+        return result;
+    }
+    int(min, max) {
+        return min + Math.floor((max - min + 1) * this.float());
+    }
+}
+exports.default = Random;
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"oRysF":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "MSTFinder", ()=>MSTFinder);
+var _coords = require("../structs/coords");
+var _pathFinder = require("./path-finder");
+class MSTFinder {
+    spanningTree = [];
+    findMST(coords, map) {
+        const generator = this.findMSTIteratively(coords, map);
+        let val = generator.next();
+        while(!val.done)val = generator.next();
+        return this.spanningTree;
+    }
+    *findMSTIteratively(coords, map) {
+        this.spanningTree = [];
+        const pathFinder = new (0, _pathFinder.PathFinder)();
+        let coordsCnt = coords.length;
+        for(let i = 0; i < coords.length; i++){
+            const coord = coords[i];
+            // referrential coordinate is a coordinate different from coord
+            // it can be anything. Dijkstra will search the whole map regardless of how
+            // close the refCoord is. It mustn't be te same coordinate, though
+            let refCoord = coords.find((c)=>!(0, _coords.coordEq)(c, coord));
+            if (!refCoord) // trivial solution -> only one node
+            refCoord = coords[0];
+            // the path itself doesn't interests us...
+            pathFinder.findPath(coord, refCoord, map);
+            yield {
+                currentCoord: coord,
+                minPath: pathFinder.steps
+            };
+            // now we know min steps from coord to each other coord
+            const minPath = pathFinder.steps;
+            // let's save this into the spanning tree
+            for(let j = 0; j < coords.length; j++){
+                const coord2 = coords[j];
+                const distIndex = i * coordsCnt + j;
+                this.spanningTree[distIndex] = minPath.get(map.coordToIndex(coord2));
+            }
+        }
+        return null;
+    }
+}
+
+},{"../structs/coords":"jEQI2","./path-finder":"zPxe2","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"zPxe2":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 /**
  * Dijkstra algorithm that uses priority queue to find the shortest
  * path from start node to all other nodes
  */ parcelHelpers.export(exports, "PathFinder", ()=>PathFinder);
-var _priorityQueue = require("./PriorityQueue");
+var _priorityQueue = require("../structs/priority-queue");
 class PathFinder {
     findPath(start, end, map) {
         const generator = this.findPathIteratively(start, end, map);
@@ -1181,7 +1477,6 @@ class PathFinder {
     *findPathIteratively(start, end, map) {
         this.reset();
         const startIndex = map.coordToIndex(start);
-        const endIndex = map.coordToIndex(end);
         // steps to all nodes are initialized to infinity, except the starting node
         for(let i = 0; i < map.width * map.height; i++)this.steps.set(i, Infinity);
         this.steps.set(startIndex, 0);
@@ -1209,15 +1504,23 @@ class PathFinder {
             });
         }
         // backtrack and fill the output path
+        this.backtracePath(start, end, map);
+        return null;
+    }
+    backtracePath(start, end, map) {
+        const startIndex = map.coordToIndex(start);
+        const endIndex = map.coordToIndex(end);
         this.closestPath.push(end);
         let currentStep = endIndex;
-        while(currentStep && currentStep !== startIndex){
+        // omg... I had there while(currentStep) and when currentStep
+        // referred to the topleft corner of the map where the index is 0,
+        // this shizzle stopped working... it took me ages to figure out
+        while(currentStep !== undefined && currentStep !== startIndex){
             const nextStep = this.backTrace.get(currentStep);
             this.closestPath.push(map.indexToCoord(nextStep));
             currentStep = nextStep;
         }
         this.closestPath.reverse();
-        return null;
     }
     reset() {
         this.steps = new Map();
@@ -1227,46 +1530,7 @@ class PathFinder {
     }
 }
 
-},{"./PriorityQueue":"9M88V","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"9M88V":[function(require,module,exports) {
-var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "PriorityQueue", ()=>PriorityQueue);
-class PriorityQueue {
-    collection = [];
-    enqueue(element, priority = 0) {
-        if (this.isEmpty) this.collection.push([
-            element,
-            priority
-        ]);
-        else {
-            let added = false;
-            for(let i = 1; i <= this.collection.length; i++)if (priority < this.collection[i - 1][1]) {
-                this.collection.splice(i - 1, 0, [
-                    element,
-                    priority
-                ]);
-                added = true;
-                break;
-            }
-            if (!added) this.collection.push([
-                element,
-                priority
-            ]);
-        }
-    }
-    getNodes() {
-        return this.collection.map((c)=>c[0]);
-    }
-    dequeue() {
-        let value = this.collection.shift();
-        return value[0];
-    }
-    get isEmpty() {
-        return this.collection.length === 0;
-    }
-}
-
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"j9PIn":[function(require,module,exports) {
+},{"../structs/priority-queue":"ahez4","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"ddrBY":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 /**
@@ -1281,8 +1545,8 @@ parcelHelpers.defineInteropFlag(exports);
  * Paris    342        0       1032
  * Prague   1267      1032       0
  * 
- */ parcelHelpers.export(exports, "TSP", ()=>TSP);
-class TSP {
+ */ parcelHelpers.export(exports, "TSPSolver", ()=>TSPSolver);
+class TSPSolver {
     startCityIndex = 0;
     // a symmetric 2D array of city-city min distances
     distances = [];
@@ -1305,8 +1569,8 @@ class TSP {
             this.memoize(cityIndex, permutation, this.distances[this.coordToIndex(this.startCityIndex, cityIndex)]);
         }
         // 1st loop: starting from the 3rd city, as the 2nd is already memoized
-        for(let cityIndex1 = 3; cityIndex1 <= this.citiesNum; cityIndex1++){
-            const permutations = this.generatePermutations(cityIndex1);
+        for(let cityIndex1 = 2; cityIndex1 < this.citiesNum; cityIndex1++){
+            const permutations = this.generatePermutations(cityIndex1 + 1); // City number = City index + 1
             // 2nd loop: go over each permutation for this city and memoize the promising ones
             for (let permutation1 of permutations){
                 if (this.notIn(this.startCityIndex, permutation1)) continue;
@@ -1412,19 +1676,30 @@ class TSP {
     };
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"b6fOg":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"cdoPD":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-var _coord = require("./Coord");
-class Renderer {
+var _canvasRenderer = require("./canvas-renderer");
+parcelHelpers.exportAll(_canvasRenderer, exports);
+var _uiRenderer = require("./ui-renderer");
+parcelHelpers.exportAll(_uiRenderer, exports);
+
+},{"./canvas-renderer":"2kaNS","./ui-renderer":"hutv1","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"2kaNS":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "CanvasRenderer", ()=>CanvasRenderer);
+var _coords = require("../structs/coords");
+class CanvasRenderer {
     lastFrameTime = 0;
     lastTickTime = 0;
     time = 0;
     speed = 0.5;
-    init(canvas, tickHandler) {
+    constructor(canvas){
         this.canvas = canvas;
-        this.tickHandler = tickHandler;
         this.ctx = canvas.getContext("2d");
+    }
+    start(tickHandler) {
+        this.tickHandler = tickHandler;
         this.loop(performance.now());
     }
     loop(time) {
@@ -1434,10 +1709,14 @@ class Renderer {
         // for a lower speed, not each loop will make a tick
         // for a higher speed, each loop can make more ticks
         const iterations = Math.floor(this.speed * (this.lastFrameTime - this.lastTickTime) / 16);
-        for(let i = 0; i < iterations; i++){
-            const data = this.tickHandler();
+        if (iterations > 0) {
+            let data = null;
+            for(let i = 0; i < iterations; i++){
+                data = this.tickHandler();
+                this.lastTickTime = this.lastFrameTime;
+            }
+            // render only last data
             this.renderData(data);
-            this.lastTickTime = this.lastFrameTime;
         }
         requestAnimationFrame((time)=>this.loop(time));
     }
@@ -1446,9 +1725,9 @@ class Renderer {
         const blockSize = this.canvas.width / data.map.width;
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         for(let i = 0; i < data.map.width; i++)for(let j = 0; j < data.map.height; j++){
-            const coord = (0, _coord.makeCoord)(i, j);
+            const coord = (0, _coords.makeCoord)(i, j);
             const tile = data.map.getTile(coord);
-            switch(tile.type){
+            switch(tile?.type){
                 case "UNKNOWN":
                     this.ctx.fillStyle = "#11111155";
                     break;
@@ -1459,18 +1738,26 @@ class Renderer {
                     this.ctx.fillStyle = "#55555555";
                     break;
                 case "CITY":
-                    this.ctx.fillStyle = "#CD444455";
+                    this.ctx.fillStyle = "#CDCD4466";
+                    break;
+                default:
+                    // if undefined, it's treated like unknown
+                    this.ctx.fillStyle = "#11111155";
                     break;
             }
             this.ctx.fillRect(i * blockSize, j * blockSize, blockSize - 1, blockSize - 1);
             if (data.map.width < 30) {
                 this.ctx.font = `${blockSize * 0.25}px courier new`;
-                this.ctx.fillStyle = "#FFFFFF";
+                this.ctx.fillStyle = "#FFFFFF55";
                 this.ctx.fillText(`[${i},${j}]`, i * blockSize + blockSize * 0.10, j * blockSize + blockSize * 0.55);
             }
         }
-        if (data.highlights) {
+        if (data.currentNode) {
             this.ctx.fillStyle = "#EFEFEF";
+            this.ctx.fillRect(data.currentNode.x * blockSize, data.currentNode.y * blockSize, blockSize - 1, blockSize - 1);
+        }
+        if (data.highlights) {
+            this.ctx.fillStyle = "#0000FFAA";
             for (let highlight of data.highlights)this.ctx.fillRect(highlight.x * blockSize, highlight.y * blockSize, blockSize - 1, blockSize - 1);
         }
         if (data.backtrace) for (let index of data.backtrace.keys()){
@@ -1491,8 +1778,61 @@ class Renderer {
         }
     }
 }
-exports.default = Renderer;
 
-},{"./Coord":"hANUT","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["iJYvl","h7u1C"], "h7u1C", "parcelRequirecb92")
+},{"../structs/coords":"jEQI2","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hutv1":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "UIRenderer", ()=>UIRenderer);
+class UIRenderer {
+    init(canvas, mapWidth, mapHeight) {
+        this.canvas = canvas;
+        this.mapWidth = mapWidth;
+        this.mapHeight = mapHeight;
+        this.initResizeHandler();
+        this.initSliders();
+    }
+    initResizeHandler = ()=>{
+        this.resizeHandler();
+        window.addEventListener("resize", this.resizeHandler.bind(this));
+    };
+    resizeHandler = ()=>{
+        if (window.innerWidth > window.innerHeight) {
+            this.canvas.height = window.innerHeight;
+            this.canvas.width = this.canvas.height * (this.mapHeight / this.mapWidth);
+        } else {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = this.canvas.width * (this.mapHeight / this.mapWidth);
+        }
+    };
+    initSliders() {
+        const parent = document.querySelector(".range-slider");
+        const rangeS = parent.querySelectorAll('input[type="range"]'), numberS = parent.querySelectorAll('input[type="number"]');
+        rangeS.forEach((el)=>{
+            el.oninput = ()=>{
+                let slide1 = parseFloat(rangeS[0].value), slide2 = parseFloat(rangeS[1].value);
+                if (slide1 > slide2) [slide1, slide2] = [
+                    slide2,
+                    slide1
+                ];
+                numberS[0].value = `${slide1}`;
+                numberS[1].value = `${slide2}`;
+            };
+        });
+        numberS.forEach((el)=>{
+            el.oninput = ()=>{
+                let number1 = parseFloat(numberS[0].value), number2 = parseFloat(numberS[1].value);
+                if (number1 > number2) {
+                    let tmp = number1;
+                    numberS[0].value = `${number2}`;
+                    numberS[1].value = `${tmp}`;
+                }
+                rangeS[0].value = `${number1}`;
+                rangeS[1].value = `${number2}`;
+            };
+        });
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["iJYvl","h7u1C"], "h7u1C", "parcelRequirecb92")
 
 //# sourceMappingURL=index.b71e74eb.js.map

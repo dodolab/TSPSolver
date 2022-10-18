@@ -1,5 +1,5 @@
-import { Coord } from './Coord';
-import { Neighbor } from './MapGrid';
+import { Coord } from './coords';
+import { Neighbor } from './map-grid';
 
 export type TileType = 'UNKNOWN' | 'ROAD' | 'WALL' | 'CITY';
 

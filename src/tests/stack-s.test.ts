@@ -1,4 +1,4 @@
-import { Stack } from '../Stack';
+import { Stack } from '../structs';
 
 test('Will maintain the FIFO order for items', () => {
 	const stack = new Stack<number>();

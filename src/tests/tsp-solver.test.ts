@@ -1,4 +1,4 @@
-import { TSP } from '../TSP';
+import { TSPSolver } from '../algorithms/tsp-solver';
 
 test('Will find cycle for trivial solution', () => {
 	const citiesNum = 1;
@@ -6,7 +6,7 @@ test('Will find cycle for trivial solution', () => {
 		0
 	];
 
-	const tsp = new TSP();
+	const tsp = new TSPSolver();
 	const tour = tsp.solve(0, citiesNum, arr);
 	expect(tour).toStrictEqual([0, 0]);
 });
@@ -18,7 +18,7 @@ test('Will find cycle for 2 cities', () => {
 		1,0
 	];
 
-	const tsp = new TSP();
+	const tsp = new TSPSolver();
 	const tour = tsp.solve(0, citiesNum, arr);
 	expect(tour).toStrictEqual([0, 1, 0]);
 	expect(tsp.minTourCost).toBe(2);
@@ -35,7 +35,7 @@ test('Will find cycle for 3 cities', () => {
 		2,4,0
 	];
 
-	const tsp = new TSP();
+	const tsp = new TSPSolver();
 	const tour = tsp.solve(0, citiesNum, arr);
 	expect(tour).toStrictEqual([0, 2, 1, 0]);
 	expect(tsp.minTourCost).toBe(9);
@@ -50,7 +50,7 @@ test('Will find cycle for 4 cities', () => {
 		2, 6, 4, 0
 	];
 
-	const tsp = new TSP();
+	const tsp = new TSPSolver();
 	const tour = tsp.solve(0, citiesNum, arr);
 	// 1 + 4 + 6 + 5
 	expect(tour).toStrictEqual([0, 2, 3, 1, 0]);
@@ -72,7 +72,7 @@ test('Will find cycle for 10 cities', () => {
 		5, 6, 4, 6, 5, 5, 3, 5, 4, 0,
 	];
 
-	const tsp = new TSP();
+	const tsp = new TSPSolver();
 	const tour = tsp.solve(0, citiesNum, arr);
 	expect(tour).toStrictEqual([0, 3, 6, 9, 8, 7, 5, 1, 4, 2, 0]);
 	expect(tsp.minTourCost).toBe(20);

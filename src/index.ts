@@ -1,229 +1,223 @@
-import { MapGrid } from './MapGrid';
-import { Coord, makeCoord, coordEq } from './Coord';
-import { MapExplorer, ExploreEvent } from './MapExplorer';
-import { PathFinder, PathFinderEvent } from './PathFinder';
-import { TSP, TSPEvent } from './TSP';
-import Renderer from './Renderer';
+import { Coord, coordEq, MapGrid } from './structs';
+import { 
+	MapExplorer, 
+	ExploreEvent, 
+	PathFinder, 
+	PathFinderEvent, 
+	TSPSolver, 
+	TSPEvent, 
+	MSTFinder, 
+	MSTFinderEvent, 
+	MapGenerator, 
+	MapGeneratorEvent } from './algorithms';
+import { selectRandomCity } from './utils';
+import { CanvasRenderer, CanvasRendererData, UIRenderer } from './renderers';
 
 
-// if bigger than 10x10, it will repeat the pattern from the map below
-let WIDTH = 10;
-let HEIGHT = 10;
+type ContextState = 'GENERATE' | 'EXPLORE' | 'SEARCH_BACK' | 'WALK_BACK' | 'TSP_PREPARE' | 'TSP_SOLVE' | 'TSP_WALK';
 
-let arr = [
-	'.', 'o', '.', '.', 'o', 'x', '.', 'o', 'x', 'x',
-	'.', '.', '.', '.', 'x', 'x', '.', '.', '.', '.',
-	'.', 'x', 'x', '.', 'x', '.', '.', '.', '.', '.',
-	'o', '.', 'x', 'x', '.', 'x', '.', '.', '.', '.',
-	'.', '.', '.', 'x', 'o', '.', 'x', '.', '.', 'o',
-	'.', '.', '.', 'x', '.', '.', '.', 'x', '.', '.',
-	'.', '.', 'o', 'x', 'x', '.', '.', 'x', '.', '.',
-	'.', '.', '.', '.', 'x', '.', 'x', 'x', '.', '.',
-	'.', '.', '.', '.', '.', '.', '.', '.', '.', '.',
-	'o', '.', '.', '.', 'x', '.', 'x', 'o', '.', '.',
-];
 
-const realMap = new MapGrid(WIDTH, HEIGHT);
 
-for (let i = 0; i < HEIGHT; i++) {
-	for (let j = 0; j < WIDTH; j++) {
-		// repeat pattern from the map above
-		switch (arr[(10 * (i % 10)) + j % 10]) {
-			case '.':
-				realMap.setTile(makeCoord(j, i), 'ROAD');
-				break;
-			case 'x':
-				realMap.setTile(makeCoord(j, i), 'WALL');
-				break;
-			case 'o':
-				realMap.setTile(makeCoord(j, i), 'CITY');
-				break;
-			default:
-				throw new Error('Unknown map tile');
+class Context {
+	mapWidth: number;
+	mapHeight: number;
+	mapCities: number;
+	mapWalls: number;
+
+	map: MapGrid;
+	salesmanStart: Coord;
+	state: ContextState;
+
+	generator = new MapGenerator();
+	generatorGenerator: Generator<MapGeneratorEvent, MapGeneratorEvent, void> = null;
+
+	explorer = new MapExplorer();
+	exploreGenerator: Generator<ExploreEvent, ExploreEvent, void> = null;
+	
+	pathFinder = new PathFinder();
+	pathFinderGenerator: Generator<PathFinderEvent, PathFinderEvent, void> = null;
+	
+	walkBack: Coord[];
+	walkBackIndex: number;
+
+	mst = new MSTFinder();
+	mstGenerator: Generator<MSTFinderEvent, MSTFinderEvent, void> = null;
+
+	tsp = new TSPSolver();
+	tspGenerator: Generator<TSPEvent, TSPEvent, void> = null;
+	
+	completeTour: Coord[];
+	completeTourIndex: number;
+
+	start(renderer: CanvasRenderer, width: number, height: number, cities: number, walls: number) {
+		this.mapWidth = width;
+		this.mapHeight = height;
+		this.mapCities = cities;
+		this.mapWalls = walls;
+
+		this.exploreGenerator = this.pathFinderGenerator = this.tspGenerator = this.mstGenerator = null;
+		this.completeTour = null;
+		this.state = 'GENERATE';
+		const baseSpeed = renderer.speed;
+
+		renderer.start(() => {
+			switch(this.state) {
+				case 'GENERATE':
+					renderer.speed = baseSpeed;
+					return this.handleGenerate();
+				case 'EXPLORE':
+					renderer.speed = baseSpeed;
+					return this.handleExplore();
+				case 'SEARCH_BACK':
+					renderer.speed = baseSpeed;
+					return this.handleSearchBack();
+				case 'WALK_BACK':
+					renderer.speed = baseSpeed / 10;
+					return this.handleWalkBack();
+				case 'TSP_PREPARE':
+					renderer.speed = baseSpeed / 10;
+					return this.handleTSPPrepare();
+				case 'TSP_SOLVE':
+					renderer.speed = baseSpeed * 10;
+					return this.handleTSPSolve();
+				case 'TSP_WALK':
+					renderer.speed = baseSpeed / 2;
+					return this.handleTSPWalk();
+			}
+		});
+	}
+
+	handleGenerate(): CanvasRendererData {
+		if (!this.generatorGenerator) {
+			this.generatorGenerator = this.generator.generateMapIteratively(this.mapWidth, this.mapHeight, this.mapCities, this.mapWalls);
+		}
+		const status = this.generatorGenerator.next();
+		if (!status.done && status.value) {
+			return {
+				map: this.generator.generatedMap,
+				currentNode: status.value.currentTile.coord,
+			}
+		} else {
+			this.map = this.generator.generatedMap;
+			this.salesmanStart = selectRandomCity(this.map).coord;
+			this.state = 'EXPLORE';
 		}
 	}
+
+	handleExplore(): CanvasRendererData {
+		if (!this.exploreGenerator) {
+			this.exploreGenerator = this.explorer.exploreMapIteratively(this.salesmanStart, this.map);
+		}
+		const status = this.exploreGenerator.next();
+		if (!status.done && status.value) {
+			return {
+				map: this.explorer.blindMap,
+				currentNode: this.explorer.current,
+				backtrace: this.explorer.backTrace,
+				milestones: this.explorer.checkpointStack.getNodes()
+			}
+		} else {
+			this.state = 'SEARCH_BACK';
+		}
+	}
+
+	handleSearchBack(): CanvasRendererData {
+		if (!this.pathFinderGenerator) {
+			this.pathFinderGenerator = this.pathFinder.findPathIteratively(this.explorer.current, this.salesmanStart, this.map);
+		}
+		const status = this.pathFinderGenerator.next();
+		if (!status.done && status.value) {
+			return {
+				map: this.map,
+				currentNode: this.explorer.current,
+				backtrace: this.pathFinder.backTrace,
+				milestones: this.pathFinder.queue.getNodes()
+			}
+		} else {
+			this.walkBack = this.pathFinder.closestPath;
+			this.walkBackIndex = 0;
+			this.state = 'WALK_BACK';
+		}
+	}
+
+	handleWalkBack(): CanvasRendererData {
+		if(this.walkBackIndex < this.walkBack.length) {
+			return {
+				map: this.map,
+				currentNode: this.walkBack[this.walkBackIndex++],
+				backtrace: this.pathFinder.backTrace
+			}
+		} else {
+			this.state = 'TSP_PREPARE';
+		}
+	}
+
+	handleTSPPrepare(): CanvasRendererData {
+		if (!this.mstGenerator) {
+			const cities = this.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+			this.mstGenerator = this.mst.findMSTIteratively(cities, this.map);
+		}
+		const status = this.mstGenerator.next();
+		if (!status.done && status.value) {
+			return {
+				map: this.map,
+				highlights: [status.value.currentCoord],
+				backtrace: status.value.minPath,
+			}
+		} else {
+			this.state = 'TSP_SOLVE';
+		}
+	}
+
+	handleTSPSolve(): CanvasRendererData {
+		const cities = this.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+		if (!this.tspGenerator) {
+			
+			const salesmanCity = cities.findIndex(c => coordEq(c, this.salesmanStart));
+			this.tspGenerator = this.tsp.solveIteratively(salesmanCity, cities.length, this.mst.spanningTree);
+		}
+		const status = this.tspGenerator.next();
+		if (!status.done && status.value) {
+			return {
+				map: this.map,
+				highlights: [cities[status.value.currentCity], cities[status.value.nextCity]],
+			}
+		} else {
+			this.state = 'TSP_WALK';
+		}
+	}
+
+	handleTSPWalk(): CanvasRendererData {
+		if(!this.completeTour) {
+			this.completeTour = [];
+			this.completeTourIndex = 0;
+			const cities = this.map.mapArray.filter(a => a.type === 'CITY').map(city => city.coord);
+			
+			for(let i = 0; i < this.tsp.tour.length; i++) {
+				const cityFrom = cities[this.tsp.tour[i]];
+				const cityTo = cities[this.tsp.tour[(i !== (this.tsp.tour.length - 1)) ? (i + 1) : 0]];
+				const path = this.pathFinder.findPath(cityFrom, cityTo, this.map);
+				this.completeTour.push(...path);
+			}
+		}
+
+		const output = {
+			map: this.map,
+			currentNode: this.completeTour[this.completeTourIndex],
+		}
+		this.completeTourIndex = (this.completeTourIndex + 1) % this.completeTour.length;
+		return output;
+	}
 }
-realMap.generateNeighbors();
 
-const getStartingCity = () => {
-	console.log('Finding a starting city:');
-	const cities = realMap.mapArray.filter(a => a.type === 'CITY').length;
-	console.log('Cities: ' + cities);
-	const randomLoc = Math.floor(cities / 2);
-
-	let cnt = 0;
-	const cityTile = realMap.mapArray.find((val) => val.type === 'CITY' && ++cnt === randomLoc);
-	return cityTile;
-}
-
-const originalCoord = getStartingCity();
-const explorer = new MapExplorer(WIDTH, HEIGHT);
-const pathFinder = new PathFinder();
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
-const ctx = canvas.getContext('2d');
+const renderer = new CanvasRenderer(canvas);
+const context = new Context();
+context.start(renderer, 10, 10, 10, 80);
 
-let lastCoord: Coord = null;
-
-let exploreGenerator: Generator<ExploreEvent, ExploreEvent, void> = null;
-let dijkstraGenerator: Generator<PathFinderEvent, PathFinderEvent, void> = null;
-
-const tsp = new TSP();
-
-let tspGenerator: Generator<TSPEvent, TSPEvent, void> = null;
-
-let state: 'EXPLORE' | 'DIJKSTRA' | 'TSP_PREPARE' | 'TSP' | 'TSP_WALKTHROUGH' = 'EXPLORE';
-
-let distanceArray: number[] = null;
-
-let currentTourIndex = 0;
-
-new Renderer().init(canvas, () => {
-
-	if (state === 'EXPLORE') {
-		if (!exploreGenerator) {
-			exploreGenerator = explorer.exploreMapIteratively(originalCoord.coord, realMap);
-		}
-		const status = exploreGenerator.next();
-		if (!status.done && status.value) {
-			return {
-				map: explorer.blindMap,
-				highlights: [explorer.current],
-				backtrace: explorer.backTrace,
-				milestones: explorer.checkpointStack.getNodes()
-			}
-		} else {
-			state = 'DIJKSTRA';
-		}
-	}
-
-	if (state === 'DIJKSTRA') {
-		if (!dijkstraGenerator) {
-			dijkstraGenerator = pathFinder.findPathIteratively(explorer.current, originalCoord.coord, realMap);
-		}
-		const status = dijkstraGenerator.next();
-		if (!status.done && status.value) {
-			return {
-				map: realMap,
-				highlights: [status.value.currentCoord],
-				backtrace: pathFinder.backTrace,
-				milestones: pathFinder.queue.getNodes()
-			}
-		} else {
-			state = 'TSP_PREPARE';
-		}
-	}
-
-	if (state === 'TSP_PREPARE') {
-		if(!distanceArray) {
-			distanceArray = [];
-		}
-		// now for the salesman problem:
-		// 1) for each city, run dijkstra
-		const cities = realMap.mapArray.filter(a => a.type === 'CITY');
-		const refPoint = realMap.mapArray.find(a => a.type === 'ROAD');
-		const pathFinder = new PathFinder();
-
-		let cityIndex = 0;
-		let citiesCnt = cities.length;
-
-		for (let city of cities) {
-			pathFinder.findPath(city.coord, refPoint.coord, realMap);
-			const minSteps = pathFinder.steps;
-			let city2Index = 0;
-			for (let city2 of cities) {
-				// distance between CITY and CITY2
-				const distIndex = city2Index * citiesCnt + cityIndex;
-				distanceArray[distIndex] = minSteps[realMap.coordToIndex(city2.coord)];
-				city2Index++;
-			}
-			cityIndex++;
-		}
-		state = 'TSP';
-	}
-
-	if (state === 'TSP') {
-		const cities = realMap.mapArray.filter(a => a.type === 'CITY');
-		
-		if (!tspGenerator) {
-			const cityWhereWeAre = cities.findIndex(c => coordEq(c.coord, originalCoord.coord));
-			tspGenerator = tsp.solveIteratively(cityWhereWeAre, cities.length, distanceArray);
-		}
-
-		const status = tspGenerator.next();
-		if (!status.done && status.value) {
-			return {
-				map: realMap,
-				highlights: [cities[status.value.currentCity].coord, cities[status.value.nextCity].coord],
-			}
-		} else {
-			state = 'TSP_WALKTHROUGH';
-		}
-	}
-
-
-	if(state === 'TSP_WALKTHROUGH') {
-		
-	}
-
-	return null;
-});
-
-
-
-const initResizeHandler = () => {
-	resizeHandler();
-	window.addEventListener('resize', resizeHandler);
-}
-
-const resizeHandler = () => {
-	if (window.innerWidth > window.innerHeight) {
-		canvas.height = window.innerHeight;
-		canvas.width = canvas.height * (HEIGHT / WIDTH);
-	} else {
-		canvas.width = window.innerWidth;
-		canvas.height = canvas.width * (HEIGHT / WIDTH);
-	}
-}
-
-initResizeHandler();
-
-(function () {
-	const parent = document.querySelector('.range-slider');
-
-	const rangeS = parent.querySelectorAll('input[type="range"]') as NodeListOf<HTMLInputElement>,
-		numberS = parent.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
-
-	rangeS.forEach((el: HTMLElement) => {
-		el.oninput = () => {
-			let slide1 = parseFloat(rangeS[0].value),
-				slide2 = parseFloat(rangeS[1].value);
-
-			if (slide1 > slide2) {
-				[slide1, slide2] = [slide2, slide1];
-			}
-
-			numberS[0].value = `${slide1}`;
-			numberS[1].value = `${slide2}`;
-		}
-	});
-
-	numberS.forEach((el) => {
-		el.oninput = () => {
-			let number1 = parseFloat(numberS[0].value),
-				number2 = parseFloat(numberS[1].value);
-
-			if (number1 > number2) {
-				let tmp = number1;
-				numberS[0].value = `${number2}`;
-				numberS[1].value = `${tmp}`;
-			}
-
-			rangeS[0].value = `${number1}`;
-			rangeS[1].value = `${number2}`;
-		}
-	});
-})();
+const ui = new UIRenderer();
+ui.init(canvas, 10, 10);
 
 // another ideas:
 // https://en.wikipedia.org/wiki/Flood_fill

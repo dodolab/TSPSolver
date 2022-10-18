@@ -1,4 +1,3 @@
-import { Coord, makeCoord } from './Coord';
 
 // https://www.interviewbit.com/blog/travelling-salesman-problem/
 
@@ -20,7 +19,7 @@ export type TSPEvent = {
  * Prague   1267      1032       0
  * 
  */
-export class TSP {
+export class TSPSolver {
 	startCityIndex = 0;
 	// a symmetric 2D array of city-city min distances
 	distances: number[] = [];
@@ -57,8 +56,8 @@ export class TSP {
 		}
 
 		// 1st loop: starting from the 3rd city, as the 2nd is already memoized
-		for (let cityIndex = 3; cityIndex <= this.citiesNum; cityIndex++) {
-			const permutations = this.generatePermutations(cityIndex);
+		for (let cityIndex = 2; cityIndex < this.citiesNum; cityIndex++) {
+			const permutations = this.generatePermutations(cityIndex + 1); // City number = City index + 1
 			// 2nd loop: go over each permutation for this city and memoize the promising ones
 			for (let permutation of permutations) {
 				if (this.notIn(this.startCityIndex, permutation)) {

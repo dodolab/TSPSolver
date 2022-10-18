@@ -9,7 +9,7 @@ import {
 	coordTop, 
 	coordTopLeft, 
 	coordTopRight 
-} from '../Coord';
+} from '../structs/coords';
 
 
 test('Generates left neighbor', () => {
