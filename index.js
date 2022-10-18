@@ -109,43 +109,48 @@ const exploreMap = () => {
     const NODE_NEW = 0;
     const NODE_EXPLORED = 1;
     const helpArray = [...exarr].map(val => NODE_NEW);
-    const queue = [];
-    queue.push(salesman);
-    // starting node is explored
-    helpArray[coordToIndex(salesman.x, salesman.y)] = NODE_EXPLORED;
+    const stack = [];
+    stack.push(salesman);
 
     console.log('Searching');
     print(helpArray);
-    while(queue.length !== 0) {
-        const qCoord = queue[queue.length - 1];
-        queue.splice(queue.length - 1, 1);
-        // get all neighbors including diagonals
-        const neighbors = getNeighbors(qCoord.x, qCoord.y, true);
-        neighbors.forEach((val, index) => {
-            // get neighbor coord
-            const coord = {x: index % 3, y: Math.floor(index / 3) };
-            const isDiagonal = index === 0 || index === 2 || index === 6 || index === 8;
-            const isCurrent = index === 4; // we can skip the current node
+    while(stack.length !== 0) {
+        // pop
+        const qCoord = stack[0];
+        stack.splice(0, 1);
+        const qCoordIndex = coordToIndex(qCoord.x, qCoord.y);
 
-            if(!isCurrent && val !== BLOCK_UNDEFINED) {
-                const bigMapCoord = { // [1, 1] is the center
-                    x: qCoord.x + coord.x - 1,
-                    y: qCoord.y + coord.y - 1
-                };
-                const bigMapIndex = coordToIndex(bigMapCoord.x, bigMapCoord.y);
-                if(!isDiagonal && helpArray[bigMapIndex] !== NODE_EXPLORED) {
-                    if(val !== BLOCK_WALL) {
-                        queue.push(bigMapCoord);
+        if(helpArray[qCoordIndex] !== NODE_EXPLORED) {
+            helpArray[qCoordIndex] = NODE_EXPLORED;
+
+            // get all neighbors including diagonals
+            const neighbors = getNeighbors(qCoord.x, qCoord.y, true);
+            neighbors.forEach((val, index) => {
+                // get neighbor coord
+                const coord = {x: index % 3, y: Math.floor(index / 3) };
+                const isDiagonal = index === 0 || index === 2 || index === 6 || index === 8;
+                const isCurrent = index === 4; // we can skip the current node
+
+                if(!isCurrent && val !== BLOCK_UNDEFINED) {
+                    const bigMapCoord = { // [1, 1] is the center
+                        x: qCoord.x + coord.x - 1,
+                        y: qCoord.y + coord.y - 1
+                    };
+                    const bigMapIndex = coordToIndex(bigMapCoord.x, bigMapCoord.y);
+                    if(!isDiagonal && helpArray[bigMapIndex] !== NODE_EXPLORED) {
+                        if(val !== BLOCK_WALL) {
+                            stack.push(bigMapCoord);
+                        }
                     }
-                    helpArray[bigMapIndex] = NODE_EXPLORED;
+                    // we can look diagonally, but can't go there
+                    // if there is a wall, we can ignore it
+                    if(isDiagonal && val === BLOCK_WALL) {
+                        helpArray[bigMapIndex] = NODE_EXPLORED;
+                    }
                 }
-                // we can look diagonally, but can't go there
-                // if there is a wall, we can ignore it
-                if(isDiagonal && val === BLOCK_WALL) {
-                    helpArray[bigMapIndex] = NODE_EXPLORED;
-                }
-            }
-        });
+            });
+        }
+
         print(helpArray);
     }
 }
