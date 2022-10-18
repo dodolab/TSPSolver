@@ -36,7 +36,7 @@ export class MapExplorer {
 		this.exploredNodes = new Set();
 		this.blindMap.generateNeighbors();
 		this.current = startCoord;
-		this.blindMap.print();
+		console.log(this.blindMap.print());
 
 
 		this.exploreTile(startCoord, map.getTile(startCoord).type);
@@ -50,9 +50,11 @@ export class MapExplorer {
 		while (!this.checkpointStack.isEmpty() || canWalkForward) {
 			// 1) walk to the last checkpoint
 			let currentTile: MapTile = null;
-			if(!canWalkForward) {
-				
+
+			if(!canWalkForward) {	
 				let lastCheckpoint = this.checkpointStack.pop();
+
+				// a little twist -> this will ignore milestones around which all cells have already been discovered
 				while(!map.getTile(lastCheckpoint).directionalNeighbors.find(neigh => neigh && neigh.isWalkable && !this.isVisited(neigh.coord))) {
 					if(this.checkpointStack.isEmpty()) {
 						return null;
@@ -71,26 +73,17 @@ export class MapExplorer {
 						tile: currentTile
 					}
 				}
-				console.log('Jsme na [' + this.current.x + ',' + this.current.y + ']');
 			} else {
 				currentTile = map.getTile(this.current); 
 			}
 
-			if(currentTile.coord.x === 5 && currentTile.coord.y === 8) {
-				console.log('Jsme tu');
-				console.log(currentTile.directionalNeighbors);
-			}
 			// 2) walk to the first walkable neighbour
-			const neighbors = currentTile.directionalNeighbors;
+			const neighbors = currentTile.directionalNeighbors; // this order is important!
 			let neighbourToWalk: Coord = null;
 			let neighboursToWalk = 0;
 
 			for (let neigh of neighbors) {
 				if (neigh) {
-					if(neigh.coord.x === 5 && neigh.coord.y === 7) {
-						console.log('HMMMMM');
-						console.log(neigh);
-					}
 					if(!this.isExplored(neigh.coord)) {
 						this.exploreTile(neigh.coord, neigh.type);
 						yield {
@@ -106,6 +99,8 @@ export class MapExplorer {
 			}
 
 			if(neighboursToWalk > 1) {
+				// we push the CROSSROAD to the stack (not the neighbour)
+				// due to backtracking to the last milestone
 				this.checkpointStack.push(this.current);
 			}
 
@@ -122,7 +117,7 @@ export class MapExplorer {
 		}
 
 		this.blindMap.generateNeighbors();
-		this.blindMap.print();
+		console.log(this.blindMap.print());
 		// at this moment, the salesman knows the map
 		// let's use dijsktra to find the shortest path from A to B
 		return null;

@@ -535,10 +535,12 @@ function hmrAcceptRun(bundle, id) {
 var _mapGrid = require("./MapGrid");
 var _coord = require("./Coord");
 var _mapExplorer = require("./MapExplorer");
-const WIDTH = 10;
-const HEIGHT = 10;
-// todo CR mapa
-const arr = [
+var _pathFinder = require("./PathFinder");
+var _tsp = require("./TSP");
+// if bigger than 10x10, it will repeat the pattern from the map below
+let WIDTH = 10;
+let HEIGHT = 10;
+let arr = [
     ".",
     "o",
     ".",
@@ -641,7 +643,8 @@ const arr = [
     ".", 
 ];
 const realMap = new (0, _mapGrid.MapGrid)(WIDTH, HEIGHT);
-for(let i = 0; i < HEIGHT; i++)for(let j = 0; j < WIDTH; j++)switch(arr[WIDTH * i + j]){
+for(let i = 0; i < HEIGHT; i++)for(let j = 0; j < WIDTH; j++)// repeat pattern from the map above
+switch(arr[10 * (i % 10) + j % 10]){
     case ".":
         realMap.setTile(new (0, _coord.Coord)(j, i), "ROAD");
         break;
@@ -655,7 +658,7 @@ for(let i = 0; i < HEIGHT; i++)for(let j = 0; j < WIDTH; j++)switch(arr[WIDTH * 
         throw new Error("Unknown map tile");
 }
 realMap.generateNeighbors();
-realMap.print();
+console.log(realMap.print());
 const getStartingCity = ()=>{
     console.log("Finding a starting city:");
     const cities = realMap.mapArray.filter((a)=>a.type === "CITY").length;
@@ -664,7 +667,7 @@ const getStartingCity = ()=>{
     let cnt = 0;
     const cityTile = realMap.mapArray.find((val)=>val.type === "CITY" && ++cnt === randomLoc);
     console.log("Initial pos: ");
-    cityTile.coord.print();
+    console.log(cityTile.coord.print());
     return cityTile;
 };
 const originalCoord = getStartingCity();
@@ -672,7 +675,8 @@ const explorer = new (0, _mapExplorer.MapExplorer)(WIDTH, HEIGHT);
 const gen = explorer.exploreMap(originalCoord.coord, realMap);
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const width = canvas.width;
+const canvasWidth = canvas.width;
+canvas.height = canvasWidth * (HEIGHT / WIDTH);
 const drawCanvas = ()=>{
     const stack = explorer.checkpointStack.getNodes();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -694,27 +698,30 @@ const drawCanvas = ()=>{
                 break;
         }
         if (explorer.current.eq(tile.coord)) ctx.fillStyle = "#EFEFEF";
-        const blockSize = width / WIDTH;
+        const blockSize = canvasWidth / WIDTH;
         ctx.fillRect(i * blockSize, j * blockSize, blockSize - 1, blockSize - 1);
-        ctx.font = "18px courier new";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillText(`[${i},${j}]`, i * blockSize + 10, j * blockSize + 45);
-        const backTrace = explorer.backTrack[explorer.coordToIndex(coord)];
-        if (backTrace) {
-            const toCoord = explorer.indexToCoord(backTrace);
-            const isLeft = toCoord.x === coord.x - 1;
-            const isRight = toCoord.x === coord.x + 1;
-            const isTop = toCoord.y === coord.y - 1;
-            const isBottom = toCoord.y === coord.y + 1;
-            ctx.fillStyle = "#FFFF00";
-            const symbol = isLeft ? "←" : isRight ? "→" : isTop ? "↑" : "↓";
-            ctx.font = "30px courier new";
-            ctx.fillText(symbol, i * blockSize + 30, j * blockSize + 70);
-        }
-        const isInStack = stack.find((t)=>t.eq(coord));
-        if (isInStack) {
-            ctx.fillStyle = "#ADADAD";
-            ctx.fillRect(i * blockSize, j * blockSize, 10, 10);
+        const ratio = WIDTH / 10;
+        if (WIDTH < 30) {
+            ctx.font = `${18 / ratio}px courier new`;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillText(`[${i},${j}]`, i * blockSize + 10 / ratio, j * blockSize + 45 / ratio);
+            const backTrace = explorer.backTrack[explorer.coordToIndex(coord)];
+            if (backTrace) {
+                const toCoord = explorer.indexToCoord(backTrace);
+                const isLeft = toCoord.x === coord.x - 1;
+                const isRight = toCoord.x === coord.x + 1;
+                const isTop = toCoord.y === coord.y - 1;
+                const isBottom = toCoord.y === coord.y + 1;
+                ctx.fillStyle = "#FFFF00";
+                const symbol = isLeft ? "←" : isRight ? "→" : isTop ? "↑" : "↓";
+                ctx.font = `${30 / ratio}px courier new`;
+                ctx.fillText(symbol, i * blockSize + 30 / ratio, j * blockSize + 70 / ratio);
+            }
+            const isInStack = stack.find((t)=>t.eq(coord));
+            if (isInStack) {
+                ctx.fillStyle = "#ADADAD";
+                ctx.fillRect(i * blockSize, j * blockSize, 10 / ratio, 10 / ratio);
+            }
         }
     }
 };
@@ -722,14 +729,53 @@ let lastCoord = null;
 let interval = setInterval(()=>{
     const status = gen.next();
     drawCanvas();
-    if (status.done) clearInterval(interval);
-    else lastCoord = status.value.tile.coord;
-}, 20); // new PathFinder().findPath(lastCoord, originalCoord.coord, realMap)
- // another ideas:
+    if (status.done) {
+        clearInterval(interval);
+        // render dijkstra
+        const path = new (0, _pathFinder.PathFinder)().findPath(lastCoord, originalCoord.coord, realMap);
+        const blockSize = canvasWidth / WIDTH;
+        path.forEach((coord)=>{
+            ctx.fillStyle = "#FF555522";
+            ctx.fillRect(coord.x * blockSize, coord.y * blockSize, blockSize - 1, blockSize - 1);
+        });
+        // now for the salesman problem:
+        // 1) for each city, run dijkstra
+        const cities = realMap.mapArray.filter((a)=>a.type === "CITY");
+        const refPoint = realMap.mapArray.find((a)=>a.type === "ROAD");
+        const pathFinder = new (0, _pathFinder.PathFinder)();
+        const distanceArray = [];
+        let cityIndex = 0;
+        const citiesCnt = cities.length;
+        for (let city of cities){
+            pathFinder.findPath(city.coord, refPoint.coord, realMap);
+            const minSteps = pathFinder.steps;
+            let city2Index = 0;
+            for (let city2 of cities){
+                // distance between CITY and CITY2
+                const distIndex = city2Index * citiesCnt + cityIndex;
+                distanceArray[distIndex] = minSteps[realMap.coordToIndex(city2.coord)];
+                city2Index++;
+            }
+            cityIndex++;
+        }
+        let print = "";
+        for(let i = 0; i < citiesCnt; i++){
+            for(let j = 0; j < citiesCnt; j++){
+                let index = i * citiesCnt + j;
+                print += `[${distanceArray[index]}] `;
+            }
+            print += "\n";
+        }
+        console.log(print);
+        // 2) find solution for that spanning tree
+        const cityWhereWeAre = cities.findIndex((c)=>c.coord.eq(originalCoord.coord));
+        new (0, _tsp.TSP)(distanceArray, citiesCnt, citiesCnt).TSP(cityWhereWeAre);
+    } else lastCoord = status.value.tile.coord;
+}, 20); // another ideas:
  // https://en.wikipedia.org/wiki/Flood_fill
  // https://gamedev.stackexchange.com/questions/55344/algorithm-for-exploring-filling-grid-map
 
-},{"./MapGrid":"5i7Xm","./Coord":"hANUT","./MapExplorer":"fzWxn"}],"5i7Xm":[function(require,module,exports) {
+},{"./MapGrid":"5i7Xm","./Coord":"hANUT","./MapExplorer":"fzWxn","./PathFinder":"i3Uq0","./TSP":"j9PIn"}],"5i7Xm":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
@@ -783,7 +829,7 @@ class MapGrid {
         }
         this.neighborsGenerated = true;
     }
-    print = ()=>{
+    print() {
         let otp = "";
         this.mapArray.forEach((val, index)=>{
             switch(val.type){
@@ -802,14 +848,16 @@ class MapGrid {
             }
             if (index !== 0 && (index + 1) % this.width === 0) otp += "\n";
         });
-        console.log(otp);
-    };
+        return otp;
+    }
 }
 
 },{"./Coord":"hANUT","./MapTile":"4h6t3","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hANUT":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "Coord", ()=>Coord);
+/**
+ * 2D map Coordinate
+ */ parcelHelpers.export(exports, "Coord", ()=>Coord);
 class Coord {
     constructor(x, y){
         this._x = x;
@@ -821,7 +869,11 @@ class Coord {
     get y() {
         return this._y;
     }
-    eq(other) {
+    /**
+	 * Checks whether the coordinate is equal to the one passed as a parameter
+	 * @param other 
+	 * @returns true if same
+	 */ eq(other) {
         return this.x === other.x && this.y === other.y;
     }
     left() {
@@ -849,7 +901,7 @@ class Coord {
         return new Coord(this.x + 1, this.y + 1);
     }
     print() {
-        console.log(`[${this.x},${this.y}]`);
+        return `[${this.x},${this.y}]`;
     }
 }
 
@@ -918,7 +970,7 @@ class MapExplorer {
         this.exploredNodes = new Set();
         this.blindMap.generateNeighbors();
         this.current = startCoord;
-        this.blindMap.print();
+        console.log(this.blindMap.print());
         this.exploreTile(startCoord, map.getTile(startCoord).type);
         this.checkpointStack = new (0, _stack.Stack)();
         this.checkpointStack.push(this.current);
@@ -929,6 +981,7 @@ class MapExplorer {
             let currentTile = null;
             if (!canWalkForward) {
                 let lastCheckpoint = this.checkpointStack.pop();
+                // a little twist -> this will ignore milestones around which all cells have already been discovered
                 while(!map.getTile(lastCheckpoint).directionalNeighbors.find((neigh)=>neigh && neigh.isWalkable && !this.isVisited(neigh.coord))){
                     if (this.checkpointStack.isEmpty()) return null;
                     lastCheckpoint = this.checkpointStack.pop();
@@ -943,21 +996,12 @@ class MapExplorer {
                         tile: currentTile
                     };
                 }
-                console.log("Jsme na [" + this.current.x + "," + this.current.y + "]");
             } else currentTile = map.getTile(this.current);
-            if (currentTile.coord.x === 5 && currentTile.coord.y === 8) {
-                console.log("Jsme tu");
-                console.log(currentTile.directionalNeighbors);
-            }
             // 2) walk to the first walkable neighbour
-            const neighbors = currentTile.directionalNeighbors;
+            const neighbors = currentTile.directionalNeighbors; // this order is important!
             let neighbourToWalk = null;
             let neighboursToWalk = 0;
             for (let neigh of neighbors)if (neigh) {
-                if (neigh.coord.x === 5 && neigh.coord.y === 7) {
-                    console.log("HMMMMM");
-                    console.log(neigh);
-                }
                 if (!this.isExplored(neigh.coord)) {
                     this.exploreTile(neigh.coord, neigh.type);
                     yield {
@@ -970,7 +1014,9 @@ class MapExplorer {
                     neighboursToWalk++;
                 }
             }
-            if (neighboursToWalk > 1) this.checkpointStack.push(this.current);
+            if (neighboursToWalk > 1) // we push the CROSSROAD to the stack (not the neighbour)
+            // due to backtracking to the last milestone
+            this.checkpointStack.push(this.current);
             if (neighbourToWalk) {
                 canWalkForward = true;
                 this.visitNewNode(neighbourToWalk);
@@ -981,7 +1027,7 @@ class MapExplorer {
             } else canWalkForward = false;
         }
         this.blindMap.generateNeighbors();
-        this.blindMap.print();
+        console.log(this.blindMap.print());
         // at this moment, the salesman knows the map
         // let's use dijsktra to find the shortest path from A to B
         return null;
@@ -1073,6 +1119,227 @@ class Stack {
     }
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["iJYvl","h7u1C"], "h7u1C", "parcelRequirecb92")
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"i3Uq0":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "PathFinder", ()=>PathFinder);
+var _priorityQueue = require("./PriorityQueue");
+class PathFinder {
+    findPath(startCoord, endCoord, map) {
+        //console.log(`Running Dijkstra: [${startCoord.x},${startCoord.y}] -> [${endCoord.x},${endCoord.y}]`);
+        this.steps = {};
+        // todo store in separate object or return a result entity
+        let backtrace = {};
+        let pq = new (0, _priorityQueue.PriorityQueue)();
+        const startIndex = map.coordToIndex(startCoord);
+        const endIndex = map.coordToIndex(endCoord);
+        this.steps[startIndex] = 0;
+        map.mapArray.forEach((val)=>{
+            // todo we could use index from the iterator as well
+            const index = map.coordToIndex(val.coord);
+            if (index !== startIndex) this.steps[index] = Infinity;
+        });
+        pq.enqueue(startCoord, 0);
+        while(!pq.isEmpty){
+            let currentCoord = pq.dequeue()[0];
+            let currentIndex = map.coordToIndex(currentCoord);
+            const neighbors = map.getTile(currentCoord).directionalNeighbors;
+            neighbors.forEach((val)=>{
+                if (val && val.isWalkable) {
+                    const neighbourIndex = map.coordToIndex(val.coord);
+                    let price = this.steps[currentIndex] + 1;
+                    if (price < this.steps[neighbourIndex]) {
+                        this.steps[neighbourIndex] = price;
+                        backtrace[neighbourIndex] = currentIndex;
+                        pq.enqueue(val.coord, price);
+                    }
+                }
+            });
+        }
+        let path = [
+            endCoord
+        ];
+        let lastStep = endIndex;
+        /*
+		// print backtrace:
+		Object.keys(backtrace).forEach(key => {
+			const val = backtrace[key];
+			const fromCoord = map.indexToCoord(parseInt(key));
+			const toCoord = map.indexToCoord(val);
+			console.log(`[${fromCoord.x},${fromCoord.y}] -> [${toCoord.x}, ${toCoord.y}]`);
+		});*/ while(lastStep && lastStep !== startIndex){
+            path.unshift(map.indexToCoord(backtrace[lastStep]));
+            lastStep = backtrace[lastStep];
+        }
+        //console.log('\nFinal path:');
+        console.log(path.map((c)=>c.print()).join(" : "));
+        return path;
+    }
+}
+
+},{"./PriorityQueue":"9M88V","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"9M88V":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "PriorityQueue", ()=>PriorityQueue);
+class PriorityQueue {
+    collection = [];
+    // we store [index, priority]
+    // todo we only have 2 priorities: 0, 1
+    enqueue(element, priority = 0) {
+        if (this.isEmpty) this.collection.push([
+            element,
+            priority
+        ]);
+        else {
+            let added = false;
+            for(let i = 1; i <= this.collection.length; i++)if (priority < this.collection[i - 1][1]) {
+                this.collection.splice(i - 1, 0, [
+                    element,
+                    priority
+                ]);
+                added = true;
+                break;
+            }
+            if (!added) this.collection.push([
+                element,
+                priority
+            ]);
+        }
+    }
+    dequeue() {
+        let value = this.collection.shift();
+        return value;
+    }
+    get isEmpty() {
+        return this.collection.length === 0;
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"j9PIn":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+// https://www.interviewbit.com/blog/travelling-salesman-problem/
+parcelHelpers.export(exports, "TSP", ()=>TSP);
+var _coord = require("./Coord");
+class TSP {
+    N = 0;
+    start = 0;
+    distance = [];
+    tour = [];
+    minTourCost = Infinity;
+    constructor(distance, width, height){
+        this.distance = distance;
+        this.width = width;
+        this.height = height;
+    /*this.width = this.height = 6;
+		this.distance = [];
+		for(let i = 0; i < this.width * this.height; i++) {
+			this.distance[i] = 10000;
+		}
+		this.distance[this.coordToIndex(5, 0)] = 10;
+		this.distance[this.coordToIndex(1, 5)] = 12;
+		this.distance[this.coordToIndex(4, 1)] = 2;
+		this.distance[this.coordToIndex(2, 4)] = 4;
+		this.distance[this.coordToIndex(3, 2)] = 6;
+		this.distance[this.coordToIndex(0, 3)] = 8;*/ }
+    coordToIndex = (x, y)=>{
+        if (x < 0 || y < 0 || x >= this.width || y >= this.height) return -1;
+        return y * this.width + x;
+    };
+    indexToCoord = (x)=>{
+        return new (0, _coord.Coord)(x % this.width, Math.floor(x / this.width));
+    };
+    notIn = (elem, subset)=>{
+        return (1 << elem & subset) == 0;
+    };
+    // This method generates all bit sets of size n where r bits 
+    // are set to one. The result is returned as a list of integer masks.
+    combinations = (r, n)=>{
+        const subsets = [];
+        this.combinations2(0, 0, r, n, subsets);
+        return subsets;
+    };
+    // To find all the combinations of size r we need to recurse until we have
+    // selected r elements (aka r = 0), otherwise if r != 0 then we still need to select
+    // an element which is found after the position of our last selected element
+    combinations2 = (set, at, r, n, subsets)=>{
+        // Return early if there are more elements left to select than what is available.
+        let elementsLeftToPick = n - at;
+        if (elementsLeftToPick < r) return;
+        // We selected 'r' elements so we found a valid subset!
+        if (r == 0) subsets.push(set);
+        else for(let i = at; i < n; i++){
+            // Try including this element
+            set |= 1 << i;
+            this.combinations2(set, i + 1, r - 1, n, subsets);
+            // Backtrack and try the instance where we did not include this element
+            set &= ~(1 << i);
+        }
+    };
+    solve = ()=>{
+        let END_STATE = (1 << this.N) - 1;
+        let memo = [];
+        const memoWidth = this.N;
+        const memoHeight = 1 << this.N;
+        const memoIndex = (x, y)=>y * memoWidth + x;
+        // Add all outgoing edges from the starting node to memo table.
+        for(let end = 0; end < this.N; end++){
+            if (end == this.start) continue;
+            memo[memoIndex(end, 1 << this.start | 1 << end)] = this.distance[this.coordToIndex(this.start, end)];
+        }
+        for(let r = 3; r <= this.N; r++){
+            const combinations = this.combinations(r, this.N);
+            for (let subset of combinations){
+                if (this.notIn(this.start, subset)) continue;
+                for(let next = 0; next < this.N; next++){
+                    if (next == this.start || this.notIn(next, subset)) continue;
+                    let subsetWithoutNext = subset ^ 1 << next;
+                    let minDist = Infinity;
+                    for(let end1 = 0; end1 < this.N; end1++){
+                        if (end1 == this.start || end1 == next || this.notIn(end1, subset)) continue;
+                        let newDistance = memo[memoIndex(end1, subsetWithoutNext)] + this.distance[this.coordToIndex(end1, next)];
+                        if (newDistance < minDist) minDist = newDistance;
+                    }
+                    memo[memoIndex(next, subset)] = minDist;
+                }
+            }
+        }
+        // Connect tour back to starting node and minimize cost.
+        for(let i = 0; i < this.N; i++){
+            if (i == this.start) continue;
+            let tourCost = memo[memoIndex(i, END_STATE)] + this.distance[this.coordToIndex(i, this.start)];
+            if (tourCost < this.minTourCost) this.minTourCost = tourCost;
+        }
+        let lastIndex = this.start;
+        let state = END_STATE;
+        this.tour.push(this.start);
+        // Reconstruct TSP path from memo table.
+        for(let i1 = 1; i1 < this.N; i1++){
+            let index = -1;
+            for(let j = 0; j < this.N; j++){
+                if (j == this.start || this.notIn(j, state)) continue;
+                if (index == -1) index = j;
+                let prevDist = memo[memoIndex(index, state)] + this.distance[this.coordToIndex(index, lastIndex)];
+                let newDist = memo[memoIndex(j, state)] + this.distance[this.coordToIndex(j, lastIndex)];
+                if (newDist < prevDist) index = j;
+            }
+            this.tour.push(index);
+            state = state ^ 1 << index;
+            lastIndex = index;
+        }
+        this.tour.push(this.start);
+        this.tour.reverse();
+    };
+    TSP = (startCity)=>{
+        this.N = this.width;
+        this.start = startCity;
+        this.solve();
+        console.log(this.tour);
+        console.log(this.minTourCost);
+        return this.tour;
+    };
+}
+
+},{"./Coord":"hANUT","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["iJYvl","h7u1C"], "h7u1C", "parcelRequirecb92")
 
 //# sourceMappingURL=index.b71e74eb.js.map

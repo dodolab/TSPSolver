@@ -2,12 +2,14 @@ import { MapGrid } from './MapGrid';
 import { Coord } from './Coord';
 import { MapExplorer } from './MapExplorer';
 import { PathFinder } from './PathFinder';
+import { TSP } from './TSP';
 
 
-const WIDTH = 10;
-const HEIGHT = 10;
-// todo CR mapa
-const arr = [
+// if bigger than 10x10, it will repeat the pattern from the map below
+let WIDTH = 10;
+let HEIGHT = 10;
+
+let arr = [
 	'.', 'o', '.', '.', 'o', 'x', '.', 'o', 'x', 'x', 
 	'.', '.', '.', '.', 'x', 'x', '.', '.', '.', '.', 
 	'.', 'x', 'x', '.', 'x', '.', '.', '.', '.', '.', 
@@ -24,7 +26,8 @@ const realMap = new MapGrid(WIDTH, HEIGHT);
 
 for (let i = 0; i < HEIGHT; i++) {
 	for (let j = 0; j < WIDTH; j++) {
-		switch(arr[WIDTH * i + j]) {
+		// repeat pattern from the map above
+		switch(arr[(10 * (i % 10)) + j % 10]) {
 			case '.':
 				realMap.setTile(new Coord(j, i), 'ROAD');
 				break;
@@ -40,7 +43,7 @@ for (let i = 0; i < HEIGHT; i++) {
 	}
 }
 realMap.generateNeighbors();
-realMap.print();
+console.log(realMap.print());
 
 
 const getStartingCity = () => {
@@ -52,7 +55,7 @@ const getStartingCity = () => {
 	let cnt = 0;
 	const cityTile = realMap.mapArray.find((val) => val.type === 'CITY' && ++cnt === randomLoc);
 	console.log('Initial pos: ');
-	cityTile.coord.print()
+	console.log(cityTile.coord.print());
 	return cityTile;
 }
 
@@ -63,7 +66,8 @@ const gen = explorer.exploreMap(originalCoord.coord, realMap);
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d');
 
-const width = canvas.width;
+const canvasWidth = canvas.width;
+canvas.height = canvasWidth * (HEIGHT / WIDTH);
 
 const drawCanvas = () => {
 	const stack = explorer.checkpointStack.getNodes();
@@ -89,30 +93,36 @@ const drawCanvas = () => {
 			if(explorer.current.eq(tile.coord)) {
 				ctx.fillStyle = '#EFEFEF';
 			}
-			const blockSize = width / WIDTH;
+			const blockSize = canvasWidth / WIDTH;
 			ctx.fillRect(i * blockSize, j * blockSize, blockSize - 1, blockSize - 1);
-			ctx.font = '18px courier new';
-			ctx.fillStyle = '#FFFFFF';
-			ctx.fillText(`[${i},${j}]`, i * blockSize + 10, j * blockSize + 45);
+			const ratio = (WIDTH / 10);
 
-			const backTrace = explorer.backTrack[explorer.coordToIndex(coord)];
-			if(backTrace) {
-				const toCoord = explorer.indexToCoord(backTrace);
-				const isLeft = toCoord.x === coord.x - 1;
-				const isRight = toCoord.x === coord.x + 1;
-				const isTop = toCoord.y === coord.y - 1;
-				const isBottom = toCoord.y === coord.y + 1;
-				ctx.fillStyle = '#FFFF00';
-				const symbol = isLeft ? '←' : isRight ? '→' : isTop ? '↑' : '↓';
-				ctx.font = '30px courier new';
-				ctx.fillText(symbol, i * blockSize + 30, j * blockSize + 70);
+			if(WIDTH < 30) {
+				ctx.font = `${18/ratio}px courier new`;
+				ctx.fillStyle = '#FFFFFF';
+				ctx.fillText(`[${i},${j}]`, i * blockSize + 10 / ratio, j * blockSize + 45 / ratio);
+
+				const backTrace = explorer.backTrack[explorer.coordToIndex(coord)];
+				
+				if(backTrace) {
+					const toCoord = explorer.indexToCoord(backTrace);
+					const isLeft = toCoord.x === coord.x - 1;
+					const isRight = toCoord.x === coord.x + 1;
+					const isTop = toCoord.y === coord.y - 1;
+					const isBottom = toCoord.y === coord.y + 1;
+					ctx.fillStyle = '#FFFF00';
+					const symbol = isLeft ? '←' : isRight ? '→' : isTop ? '↑' : '↓';
+					ctx.font = `${30/ratio}px courier new`;
+					ctx.fillText(symbol, i * blockSize + 30/ratio, j * blockSize + 70/ratio);
+				}
+	
+				const isInStack = stack.find(t => t.eq(coord));
+				if(isInStack) {
+					ctx.fillStyle = '#ADADAD';
+					ctx.fillRect(i * blockSize, j * blockSize, 10/ratio, 10/ratio);
+				}
 			}
 
-			const isInStack = stack.find(t => t.eq(coord));
-			if(isInStack) {
-				ctx.fillStyle = '#ADADAD';
-				ctx.fillRect(i * blockSize, j * blockSize, 10, 10);
-			}
 		}
 
 	}
@@ -126,13 +136,55 @@ let interval = setInterval(() => {
 	drawCanvas();
 	if(status.done) {
 		clearInterval(interval);
+		
+		// render dijkstra
+		const path = new PathFinder().findPath(lastCoord, originalCoord.coord, realMap)
+		const blockSize = canvasWidth / WIDTH;
+		path.forEach(coord => {
+			ctx.fillStyle = '#FF555522';
+			ctx.fillRect(coord.x * blockSize, coord.y * blockSize, blockSize - 1, blockSize - 1);
+		});
+
+		// now for the salesman problem:
+		// 1) for each city, run dijkstra
+		const cities = realMap.mapArray.filter(a => a.type === 'CITY');
+		const refPoint = realMap.mapArray.find(a => a.type === 'ROAD');
+		const pathFinder = new PathFinder();
+
+		const distanceArray = [];
+		let cityIndex = 0;
+		const citiesCnt = cities.length;
+
+		for(let city of cities) {
+			pathFinder.findPath(city.coord, refPoint.coord, realMap);
+			const minSteps = pathFinder.steps;
+			let city2Index = 0;
+			for(let city2 of cities) {
+				// distance between CITY and CITY2
+				const distIndex = city2Index * citiesCnt + cityIndex;
+				distanceArray[distIndex] = minSteps[realMap.coordToIndex(city2.coord)];
+				city2Index++;
+			}
+			cityIndex++;
+		}
+
+		let print = '';
+		for(let i = 0; i < citiesCnt; i++) {
+			for(let j = 0; j < citiesCnt; j++) {
+				let index = i * citiesCnt + j;
+				print += `[${distanceArray[index]}] `;
+			}
+			print += '\n';
+		}
+		console.log(print);
+		// 2) find solution for that spanning tree
+		const cityWhereWeAre = cities.findIndex(c => c.coord.eq(originalCoord.coord));
+		new TSP(distanceArray, citiesCnt, citiesCnt).TSP(cityWhereWeAre);
 	} else {
 		lastCoord = status.value.tile.coord;
 	}
 }, 20);
 
-
-// new PathFinder().findPath(lastCoord, originalCoord.coord, realMap)
 
 // another ideas:
 // https://en.wikipedia.org/wiki/Flood_fill

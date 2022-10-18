@@ -61,7 +61,7 @@ export class MapGrid {
         this.neighborsGenerated = true;
 	}
 
-	print = () => {
+	print() {
 		let otp = "";
 		this.mapArray.forEach((val, index) => {
 			switch(val.type) {
@@ -82,6 +82,6 @@ export class MapGrid {
 				otp += '\n';
 			}
 		});
-		console.log(otp);
+		return otp;
 	}
 }

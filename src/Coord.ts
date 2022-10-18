@@ -1,3 +1,6 @@
+/**
+ * 2D map Coordinate
+ */
 export class Coord {
 	private _x: number;
 	private _y: number;
@@ -15,6 +18,11 @@ export class Coord {
 		return this._y;
 	}
 
+	/**
+	 * Checks whether the coordinate is equal to the one passed as a parameter
+	 * @param other 
+	 * @returns true if same
+	 */
 	eq(other: Coord) {
 		return this.x === other.x && this.y === other.y;
 	}
@@ -52,6 +60,6 @@ export class Coord {
 	}
 
 	print() {
-        console.log(`[${this.x},${this.y}]`);
+		return `[${this.x},${this.y}]`
     }
 }
