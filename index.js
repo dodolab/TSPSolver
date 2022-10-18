@@ -1,3 +1,34 @@
+class PriorityQueue {
+    constructor() {
+        this.collection = [];
+    }
+    // we store [index, priority]
+    enqueue(element) {
+        if (this.isEmpty()) {
+            this.collection.push(element);
+        } else {
+            let added = false;
+            for (let i = 1; i <= this.collection.length; i++) {
+                if (element[1] < this.collection[i - 1][1]) {
+                    this.collection.splice(i - 1, 0, element);
+                    added = true;
+                    break;
+                }
+            }
+            if (!added) {
+                this.collection.push(element);
+            }
+        }
+    };
+    dequeue() {
+        let value = this.collection.shift();
+        return value;
+    }; isEmpty() {
+        return (this.collection.length === 0)
+    };
+}
+
+
 let WIDTH = 30;
 let HEIGHT = 20;
 
@@ -12,7 +43,7 @@ const salesman = {
     y: 0
 }
 
-/*for(let i = 0; i < WIDTH; i++) {
+for(let i = 0; i < WIDTH; i++) {
     for(let j = 0; j < HEIGHT; j++) {
         const rand = Math.random();
         if(rand > 0.75) {
@@ -25,8 +56,11 @@ const salesman = {
             arr.push(BLOCK_ROAD);
         }
     }
-}*/
+}
 
+
+
+/*
 WIDTH = HEIGHT = 6;
 arr = [
     1, 1, 1, 1, 1, 1,
@@ -35,7 +69,7 @@ arr = [
     2, 2, 2, 2, 1, 2,
     1, 1, 1, 1, 1, 3,
     3, 1, 2, 1, 1, 1,
-];
+];*/
 
 const print = (array = arr) => {
     let otp = "";
@@ -116,12 +150,14 @@ const exploreMap = () => {
     print(helpArray);
     while(stack.length !== 0) {
         // pop
-        const qCoord = stack[0];
-        stack.splice(0, 1);
+        const qCoord = stack[stack.length - 1];
+        stack.splice(stack.length - 1, 1);
         const qCoordIndex = coordToIndex(qCoord.x, qCoord.y);
 
         if(helpArray[qCoordIndex] !== NODE_EXPLORED) {
             helpArray[qCoordIndex] = NODE_EXPLORED;
+            // explore map
+            exarr[qCoordIndex] = arr[qCoordIndex];
 
             // get all neighbors including diagonals
             const neighbors = getNeighbors(qCoord.x, qCoord.y, true);
@@ -146,6 +182,9 @@ const exploreMap = () => {
                     // if there is a wall, we can ignore it
                     if(isDiagonal && val === BLOCK_WALL) {
                         helpArray[bigMapIndex] = NODE_EXPLORED;
+                        salesman.x = bigMapCoord.x;
+                        salesman.y = bigMapCoord.y;
+                        exarr[bigMapIndex] = arr[bigMapIndex];
                     }
                 }
             });
@@ -153,8 +192,69 @@ const exploreMap = () => {
 
         print(helpArray);
     }
+    print(exarr);
+
+    // at this moment, the salesman knows the map
+    // let's use dijsktra to find the shortest path from A to B
+
+}
+
+
+const findPathWithDijkstra = (startCoord, endCoord, arr) => {
+    console.log('Running Dijkstra', startCoord, endCoord);
+    let steps = {};
+    let backtrace = {};
+    let pq = new PriorityQueue();
+
+    const startIndex = coordToIndex(startCoord.x, startCoord.y);
+    const endIndex = coordToIndex(endCoord.x, endCoord.y);
+
+    steps[startIndex] = 0;
+
+    arr.forEach((val, index) => {
+        if(index !== startIndex) {
+            steps[index] = Infinity;
+        }
+    });
+
+    pq.enqueue([startIndex, 0]);
+
+    while (!pq.isEmpty()) {
+        let currentIndex = pq.dequeue()[0]; 
+        let currentCoord = indexToCoord(currentIndex);
+        
+        const neighbors = getNeighbors(currentCoord.x, currentCoord.y, false);
+        // skip the point where we actually are
+        neighbors.forEach((val, index) => {
+            if (index !== 4 && val !== BLOCK_UNDEFINED && val !== BLOCK_WALL) {
+                const coord = {x: index % 3, y: Math.floor(index / 3) };
+                const bigMapCoord = { // [1, 1] is the center
+                    x: currentCoord.x + coord.x - 1,
+                    y: currentCoord.y + coord.y - 1
+                };
+                const bigMapIndex = coordToIndex(bigMapCoord.x, bigMapCoord.y);
+
+                let price = steps[currentIndex] + 1;
+                if(price < steps[bigMapIndex]) {
+                    steps[bigMapIndex] = price;
+                    backtrace[bigMapIndex] = currentIndex;
+                    pq.enqueue([bigMapIndex, price]);
+                }
+            }
+        });
+    }
+    let path = [indexToCoord(endIndex)];
+    let lastStep = endIndex; 
+    while (lastStep && lastStep !== startIndex) {
+        path.unshift(indexToCoord(backtrace[lastStep]));
+        lastStep = backtrace[lastStep];
+    }
+    console.log(path);
+    console.log(steps[endIndex]);
 }
 
 print();
 putSalesmanIntoMap();
+const firstSalesmanLoc = { ...salesman };
 exploreMap();
+findPathWithDijkstra(salesman, firstSalesmanLoc, arr);
