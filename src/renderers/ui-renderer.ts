@@ -90,9 +90,9 @@ export class UIRenderer {
 			const citiesDensity = parseInt(citiesDensityEl.value);
 			const wallsDensity = parseInt(wallsDensityEl.value);
 	
-			if (isNaN(mapWidth) || mapWidth <= 0 || mapWidth > 50 || isNaN(mapHeight) 
-			|| mapHeight <= 0 || mapHeight > 50) {
-				messages.push('Invalid map size. The allowed range is 1x1 to 50x50');
+			if (isNaN(mapWidth) || mapWidth < 2 || mapWidth > 100 || isNaN(mapHeight) 
+			|| mapHeight < 2 || mapHeight > 100) {
+				messages.push('Invalid map size. The allowed range is 2x2 to 100x100');
 			}
 			if (isNaN(randomSeed) || randomSeed <= 0) {
 				messages.push('Invalid random seed. The value should be greater than 0');

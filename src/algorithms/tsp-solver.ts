@@ -80,6 +80,8 @@ export class TSPSolver {
 					}
 
 					// report to the observers
+					// note: to speed things up, move this to the previous loop and select cityIndex as
+					// the nextCity parameter also
 					yield {
 						currentCity: cityIndex,
 						nextCity: nextCityIndex,

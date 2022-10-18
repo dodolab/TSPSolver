@@ -15,7 +15,7 @@ You can try it out live [here](https://dodo.me/salesman/index.html)
 - The Salesman can only see the surrounding cells (including the diagonal ones)
 - **Flow**
   1) The Salesman explores the map to find all cities
-  2) The Salesman then returns to the city where he/she first appeared
+  2) The Salesman then returns to the city where he/she first appeared the shortest way possible
   3) The Salesman then calculates the optimal solution on how to visit each city only once and return back to the first city
 
 ### Installation
@@ -27,8 +27,8 @@ You can try it out live [here](https://dodo.me/salesman/index.html)
 
 ### GUI
 - The GUI displays the following inputs:
-  - Map Width: width of the map, range 0-50
-  - Map Height: height of the map, range 0-50
+  - Map Width: width of the map, range 2-100
+  - Map Height: height of the map, range 2-100
   - Random Seed: random seed for the map generator (should be a prime number)
   - Start City: city number where the salesman starts (range 1 - #number of cities)
   - Visual Speed: speed of the visual window
@@ -39,6 +39,9 @@ You can try it out live [here](https://dodo.me/salesman/index.html)
 - The webpage is responsive and should work on mobile phones too
 
 ![Screenshot2](./docs/scr2.png)
+
+#### Known Limitations
+- the canvas always re-renders the full map, no matter what has or hasn't changed - if we'd only re-rendered the changed tiles (would need some kind of memorizer), it would speed up the visual part especially for bigger maps
 
 ### Flow
 1. A generator will generate a random map
@@ -94,7 +97,7 @@ project
 
 #### Architecture
 - architecture-wise, the project follows a hybrid object-oriented approach with functional programming where it came in handy
-- all algorithms are implemented as generators, so that they can be easily interrupted
+- **all algorithms are implemented as generators**, so that they can be easily interrupted
 - the whole flow is implemented as a state machine (`runner.ts`) that can run either inside an EventLoop (implemented by `CanvasRenderer`) or during a single loop (implemented by PerformanceLooper for performance tests)
 - every single state represents one part of the flow
   - for instance, `ExploreState` will initialize the algorithm, repeatedly call its generator, and return back reporting data that will be used by the `CanvasRenderer`
@@ -126,7 +129,7 @@ project
 
 #### Known Issues
 - the generator is not very good for maps with a dense amount of walls, as it spends a lot of time trying to remove some of them to make all cities visitable
-- the distribution of walls looks a bit noisy. A more natural solution would be a simplex noise, voronoi cells, and the like
+- the distribution of walls still looks too random. A more natural solution would be a simplex noise, voronoi cells, and the like.
 
 
 ![Screenshot4](./docs/scr4.png)
@@ -140,9 +143,10 @@ project
 - the algorithm uses two sets: visited nodes and explored nodes. If we enter a cell, all surrounding cells will be marked explored
 - for exploration, we can use even diagonal cells. For movement, however, we can only go up, down, left, and right
 - the order in which the neighbors are taken into consideration is important, as it dictates how the algorithm will search the map
+- note: the fact that we consider even diagonal cells when exploring the neighbourhood, saves us some revisiting, yet it doesn't have very significant impact - you can try yourself in `map-explorer.ts`, instead of `currentTile.neighborsArr`, choose the `directionalNeighbors` attribute
   
 #### Known Issues
-- in some instances, when the map has almost been explored, there may remain a few unexplored "islands". The problem is that the algorithms doesn't know how to get to these islands, and starts backtracking until it explores the map completely
+- in some instances, when the map has almost been explored, there may remain a few unexplored "islands". The problem is that the algorithm doesn't know how to get to these islands, and starts backtracking until it explores the map completely
 - this results in weird "dizzy" movement. A solution could be to perfrom Dijkstra or AStar on a partially explored map
 
 
@@ -154,9 +158,8 @@ project
 - a heuristic function is the number of steps - to make one step, it takes `cost = 1`
 
 #### Known Issues
-- as it is a standard implementation, it always explores the full map, even if there can't be any better solution
-- the default implementation doesn't take into consideration the Euclidean topology of the map
-- a solution would be to stop the algorithm when the current cost-so-far is the same as a Manhattan distance between both points - this could save a few iterations on very sparse maps
+- as it is a standard implementation, it always explores the full map, even if there can't be any better solution - it doesn't take into consideration the Euclidean topology of the map
+- a solution would be to stop the algorithm when the current cost-so-far is the same as the Manhattan distance between both points - this could save a few iterations on very sparse maps
 
 ### Minimum Spanning Tree
 - in `algorithms/mst-finder.ts`
@@ -169,21 +172,21 @@ project
 - we used dynamic programming with some recursive relation of sub-problems
   - for `n` cities, there are `O(n * 2^n)` subproblems
   - the total complexity is `O(n^2 * 2^n)` which is really terrible, but still better than `O(n!)`
-- to make the implementation as fast as possible, the algorithm uses bit masks and sparse arrays to memorize the subproblems. There are no 2D coordinates, only 1D masked numbers
+- to make the implementation as fast as possible, **the algorithm uses bit masks and sparse arrays** to memorize the subproblems. There are no 2D coordinates, only an array of permutations stored in bit masks
 
 #### Known Limitations
 - even with dynamic programming, it is insanely slow (see the performance test below)
 - since it uses a bit array, the theoretical maximum number of cities is 64, yet with a common setup (2GB memory and i7 CPU), you will hardly go past 25 cities
-- the current algorithm expects that a minimal path from city A to city B can be different than the path from B to A. Therefore, it could have run a bit faster if this was taken out
+- the current algorithm expects that a minimal path from city A to city B can be different than the path from B to A, which is not our case. Therefore, it could have run a bit faster if this was taken out
+- **note: the visual part can be sped up significantly**, if you move the `yield` operator in `tsp-solver.ts` to the parent loop. It won't look that visually pleasing, but for cities > 15, it will speed up the run by 50%!
 
 ## Tests
 ### Automated tests
 - all algorithms and data structures have a few tests in the `tests` folder
-- these tests work well while refactoring the algorithms, as they immediatelly find out if there is something wrong
 
 ### Performance Testing
 
-- there are two main bottlenecks: map generator (rationale are described above) and TSP (you don't say)
+- there are two main bottlenecks: map generator (rationale are described above) and TSP (of course)
 - all tests were conducted without the visual layout, on Intel Core i7-6800K 3.40 GHz, 6 Cores
 - **note that the visual part runs significantly slower, as it has to render the data**
 
@@ -236,7 +239,7 @@ project
 
 #### TSP test
 - there seems to be a boundary after which the complexity explodes - in this case it's around 18 cities
-- TSP doesn't work with the whole map, only with cities. Therefore, the number of walls doesn't have any significancy to the test.
+- note that **TSP doesn't work with the whole map, only with cities**. Therefore, the number of walls doesn't have any significancy to the test.
 
 ```
 Configuration:
@@ -269,7 +272,7 @@ Walls:    0
 | 22 | 36532 | 2322 |
 
 #### Map Generator test
-- the generator seems to have problems with dense maps, as it needs significantly more iterations to find a proper spot for the remaining walls
+- the generator seems to have problems with dense maps, as it needs a lot more iterations to find a proper spot for the remaining walls
 - the complexity, however, seems to be linear up to 90% wall density. From 90% onward, it becomes quadratic.  
 
 ```
