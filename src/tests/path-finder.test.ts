@@ -1,5 +1,5 @@
 import { makeCoord } from '../structs/coord';
-import { loadMapFromString } from '../utils';
+import { loadMapFromString } from './utils';
 import { PathFinder } from '../algorithms/path-finder';
 
 test('Will find path for trivial solution', () => {

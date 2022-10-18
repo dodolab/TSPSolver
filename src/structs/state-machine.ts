@@ -1,18 +1,39 @@
 
-
+/**
+ * A structure each state has to implement
+ */
 export type State<Context, Result> = {
+	// state name
 	name: string;
+	// handler that runs each tick
 	handlerFunc: (context: Context) => Result;
+	// called once after transition to the state
 	firstRun?: (context: Context) => void;
+	// called once before transition to another state
 	cleanUp?: (context: Context) => void;
 }
 
+/**
+ * A simple state machine with the possibility to get a callback
+ * whenever a state changes
+ */
 export class StateMachine<Context, Result> {
 
 	private states: Map<string, State<Context, Result>> = new Map();
 	private transitions: Map<string, string> = new Map();
-	private currentState: State<Context, Result>;
+	private _currentState: State<Context, Result>;
 	private running = false;
+	private context: Context;
+
+	private stateChangeObserver: (previous: string, next: string) => void;
+
+	get currentState() {
+		return this._currentState;
+	}
+
+	get isRunning() {
+		return this.running;
+	}
 
 	addState(state: State<Context, Result>) {
 		this.states.set(state.name, state);
@@ -20,7 +41,7 @@ export class StateMachine<Context, Result> {
 	}
 
 	setInitialState(name: string) {
-		this.currentState = this.states.get(name);
+		this._currentState = this.states.get(name);
 		return this; // chainable
 	}
 
@@ -29,18 +50,29 @@ export class StateMachine<Context, Result> {
 		return this; // chainable
 	}
 
-	run(context: Context) {
+	setContext(context: Context) {
+		this.context = context;
+		return this; // chainable
+	}
+
+	addOnStateChangeObserver(observer: (previous: string, next: string) => void) {
+		this.stateChangeObserver = observer;
+		return this; // chainable
+	}
+
+	run() {
 		if(!this.running) {
 			this.running = true;
-			this.currentState.firstRun?.(context);
+			this._currentState.firstRun?.(this.context);
+			this.stateChangeObserver?.(null, this._currentState.name);
 		} 
-		if(this.currentState) {
-			const result = this.currentState.handlerFunc(context);
+		if(this._currentState) {
+			const result = this._currentState.handlerFunc(this.context);
 			if(result === null) {
-				this.currentState.cleanUp?.(context);
-				this.gotoNext(context);
+				this._currentState.cleanUp?.(this.context);
+				this.gotoNext();
 				// run again
-				this.run(context);
+				this.run();
 			} else {
 				return result;
 			}
@@ -50,13 +82,19 @@ export class StateMachine<Context, Result> {
 		}
 	}
 
-	private gotoNext(context: Context) {
-		const newState = this.transitions.get(this.currentState.name);
+	private gotoNext() {
+		const newState = this.transitions.get(this._currentState.name);
 		if(newState) {
-			this.currentState = this.states.get(newState);
-			this.currentState.firstRun?.(context);
+			const currentStateName = this._currentState.name;
+			this._currentState = this.states.get(newState);
+			this._currentState.firstRun?.(this.context);
+			// we need to call it after first run
+			this.stateChangeObserver?.(currentStateName, newState);
 		} else {
+			// a little bit lame, but whatever...
+			this.stateChangeObserver?.(null, null);
 			// finish
+			this.running = false;
 			return null;
 		}
 	}

@@ -8,8 +8,8 @@ import {
 	coordRight, 
 	coordTop, 
 	coordTopLeft, 
-	coordTopRight 
-} from '../structs/coords';
+	coordTopRight,
+} from '../structs';
 
 
 test('Generates left neighbor', () => {

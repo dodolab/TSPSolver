@@ -9,6 +9,7 @@ test('Will find cycle for trivial solution', () => {
 	const tsp = new TSPSolver();
 	const tour = tsp.solve(0, citiesNum, arr);
 	expect(tour).toStrictEqual([0, 0]);
+	expect(tsp.minTourCost).toBe(0);
 });
 
 test('Will find cycle for 2 cities', () => {

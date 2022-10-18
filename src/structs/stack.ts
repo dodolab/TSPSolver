@@ -1,3 +1,5 @@
+
+
 type StackNode<T> = {
 	node: T;
 	next: StackNode<T>;

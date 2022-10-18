@@ -12,7 +12,9 @@ import {
 } from './coord';
 import { MapTile, TileType } from './map-tile';
 
+
 export type Neighbor = 'left' | 'right' | 'top' | 'bottom' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+
 
 /**
  * 2D map structure
@@ -21,7 +23,6 @@ export class MapGrid {
 	mapArray: MapTile[] = [];
 	width: number;
 	height: number;
-	neighborsGenerated = false;
 
 	constructor(width: number, height: number) {
 		this.width = width;
@@ -68,12 +69,11 @@ export class MapGrid {
 				bottomLeft: this.getTile(coordBottomLeft(tile.coord)),
 				bottomRight: this.getTile(coordBottomRight(tile.coord)),
 			}
-			// this order is very important
+			// this order is very important. If it's different, the DFS algorithm would behave differently
 			tile.directionalNeighbors = [tile.neighbors.top, tile.neighbors.left, tile.neighbors.bottom, tile.neighbors.right];
 
 			tile.neighborsArr = [tile.neighbors.top, tile.neighbors.left, tile.neighbors.bottom, tile.neighbors.right,
 			tile.neighbors.topLeft, tile.neighbors.topRight, tile.neighbors.bottomLeft, tile.neighbors.bottomRight]
 		}
-		this.neighborsGenerated = true;
 	}
 }

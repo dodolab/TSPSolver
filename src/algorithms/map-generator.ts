@@ -4,10 +4,17 @@ import { MapTile } from '../structs/map-tile';
 import { MapExplorer } from './map-explorer';
 import Random from "./random-generator";
 
+/**
+ * Reporting structure for the generator
+ */
 export type MapGeneratorEvent = {
 	currentTile: MapTile;
 }
 
+/**
+ * Generator for maps. Does not guarantee that all walkable paths are visitable,
+ * yet it guarantees that all cities are visitable
+ */
 export class MapGenerator {
 	generatedMap: MapGrid;
 	randomSeed: number;
@@ -26,6 +33,11 @@ export class MapGenerator {
 	}
 
 	*generateMapIteratively(width: number, height: number, cities: number, walls: number): Generator<MapGeneratorEvent, MapGeneratorEvent, void> {
+
+		if(cities <= 0) {
+			throw new Error('There must be at least one city!');
+		}
+
 		this.generatedMap = new MapGrid(width, height);
 
 		const random = new Random(this.randomSeed);
@@ -58,8 +70,8 @@ export class MapGenerator {
 			const wallsNearby = randomTile.directionalNeighbors.filter(neigh => neigh && neigh.type === 'WALL').length;
 
 			// the more walls nearby, the higher the probability to put it exactly here
-			// 93% for 8 neighbours, 83% for 7, ... 33% for 2, 23% for 1, 13% for 0
-			const putWall = Math.floor(random.float() * 10) <= (wallsNearby * 1.5 + 2) / 1.5;
+			// 99% for 4 neighbours, 78% for 3, ... 58% for 2, 38% for 1, 18% for 0
+			const putWall = Math.floor(random.float() * 5) <= (wallsNearby * 2.2 + 2) / 2.2;
 			if(putWall) {
 				this.generatedMap.setTile(randomTile.coord, 'WALL');
 				this.generatedMap.generateNeighbors(); // regenerate links
@@ -80,10 +92,14 @@ export class MapGenerator {
 		iteration = 0;
 
 		while(citiesPut < cities) {
-			const tilesWithoutCities = this.generatedMap.mapArray.filter(tile => tile.type !== 'CITY' && tile.type !== 'WALL');
+			let tilesWithoutCities = this.generatedMap.mapArray.filter(tile => tile.type !== 'CITY' && tile.type !== 'WALL');
 
 			if(tilesWithoutCities.length === 0) {
-				// safety check, yet this should be really weird if the map would be full of cities...
+				// weird, but let's ignore walls
+				tilesWithoutCities = this.generatedMap.mapArray.filter(tile => tile.type === 'WALL');
+			}
+			if(tilesWithoutCities.length === 0) {
+				// this can happen when the map is full of cities
 				break;
 			}
 
@@ -111,12 +127,15 @@ export class MapGenerator {
 		// brute-force test if all cities can be visited
 		const explorer = new MapExplorer();
 		const firstCityCoord = this.generatedMap.mapArray.filter(tile => tile.type === 'CITY')[0].coord;
+
 		const cityTiles = this.generatedMap.mapArray.filter(tile => tile.type === 'CITY');
 		
 		explorer.exploreMap(firstCityCoord, this.generatedMap);
 		let lockedCities = cityTiles.filter(tile => !explorer.visitedNodes.has(this.generatedMap.coordToIndex(tile.coord)));
 		
+
 		while(lockedCities.length !== 0) {
+			// hmm... there are some locked cities...
 			// search for walls that have neighbours that were not visited
 			// and sort them from closest to the starting node
 			const allWalls = this.generatedMap.mapArray.filter(tile => tile.type === 'WALL');
@@ -129,18 +148,18 @@ export class MapGenerator {
 			if(suspiciousWalls.length > 0) {
 				// remove the closest suspicious wall
 				const wallToRemove = suspiciousWalls[0];
-				// transform to roads
+				// transform it to roads
 				this.generatedMap.setTile(wallToRemove.coord, 'ROAD');
 				yield {
 					currentTile: this.generatedMap.getTile(wallToRemove.coord)
 				}
 
-				// refresh
+				// refresh everything and re-explore the map
 				this.generatedMap.generateNeighbors();
 				explorer.exploreMap(firstCityCoord, this.generatedMap);
 				lockedCities = cityTiles.filter(tile => !explorer.visitedNodes.has(this.generatedMap.coordToIndex(tile.coord)));
 			} else {
-				// should not happen, but if it does, we will just remove the cities
+				// should not happen, but if it does, we will just remove some cities (worst case scenario)
 				for(let lockedCity of lockedCities) {
 					this.generatedMap.setTile(lockedCity.coord, 'ROAD');
 					this.generatedMap.generateNeighbors();

@@ -1,6 +1,6 @@
 import { makeCoord } from '../structs/coord';
 import { MapExplorer } from '../algorithms/map-explorer';
-import { loadMapFromString } from '../utils';
+import { loadMapFromString } from './utils';
 
 test('Will explore trivial solution', () => {
 	const width = 1;

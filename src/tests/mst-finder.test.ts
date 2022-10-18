@@ -1,5 +1,5 @@
 import { makeCoord } from '../structs/coord';
-import { loadMapFromString } from '../utils';
+import { loadMapFromString } from './utils';
 import { MSTFinder } from '../algorithms/mst-finder';
 
 test('Will find MST for trivial case', () => {

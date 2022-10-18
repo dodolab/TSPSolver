@@ -2,11 +2,18 @@ import { MapGrid } from "../structs/map-grid";
 import { Coord, coordEq } from '../structs/coord';
 import { PathFinder } from './path-finder';
 
+/**
+ * Reporting structure for the generator
+ */
 export type MSTFinderEvent = {
 	currentCoord: Coord;
 	minPath: Map<number, number>;
+	backTrace: Map<number, number>;
 }
 
+/**
+ * Minimum Spanning Tree finder, uses Dijkstra for each pair of coordinates
+ */
 export class MSTFinder {    
 	spanningTree: number[] = [];
 	
@@ -41,6 +48,7 @@ export class MSTFinder {
 			yield {
 				currentCoord: coord,
 				minPath: pathFinder.steps,
+				backTrace: pathFinder.backTrace
 			}
 			// now we know min steps from coord to each other coord
 			const minPath = pathFinder.steps;

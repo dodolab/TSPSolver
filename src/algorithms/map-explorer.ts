@@ -3,11 +3,18 @@ import { MapGrid } from '../structs/map-grid';
 import { Stack } from '../structs/stack';
 import { TileType, MapTile } from '../structs/map-tile';
 
+/**
+ * Reporting structure for the generator
+ */
 export type ExploreEvent = {
 	type: 'GOTO' | 'EXPLORE';
 	tile: MapTile;
 }
 
+/**
+ * Explorer that gradually fills a blind map.
+ * Every tick the explorer can only go left, right, up or down
+ */
 export class MapExplorer {
 	// current position
 	current: Coord;
@@ -44,14 +51,17 @@ export class MapExplorer {
 		// we go forward and when we need to go back, we will use the stack
 		let canWalkForward = false;
 
-		while (!this.checkpointStack.isEmpty() || canWalkForward) {
+		while (!this.checkpointStack.isEmpty() || canWalkForward || this.exploredNodes.size === (map.mapArray.length)) {
 
 			if (!canWalkForward) {
 				let lastCheckpoint = this.checkpointStack.pop();
 
 				// a little twist -> this will ignore milestones around which all cells have already been discovered
+				// go to the last milestone that has at least one walkable neighbour that hasn't been visited 
 				while (!map.getTile(lastCheckpoint).directionalNeighbors
-					.find(neigh => neigh && neigh.isWalkable && !this.isVisited(neigh.coord))) {
+					.find(neigh => {
+						return neigh && neigh.isWalkable && !this.isVisited(neigh.coord)
+					})) {
 
 					if (this.checkpointStack.isEmpty()) {
 						// algorithm termination

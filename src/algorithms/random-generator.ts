@@ -1,22 +1,24 @@
+
 /**
  * Multiply-with-carry random generator
+ * Taken from https://stackoverflow.com/questions/521295/seeding-the-random-number-generator-in-javascript
  */
 export default class Random {
 
-	m_w: number;
-	m_z: number;
+	mW: number;
+	mZ: number;
 	mask = 0xffffffff;
 
 	constructor(seed: number) {
-		this.m_w  = (123456789 + seed) & this.mask;
-		this.m_z  = (987654321 - seed) & this.mask;
+		this.mW  = (123456789 + seed) & this.mask;
+		this.mZ  = (987654321 - seed) & this.mask;
 	
 	}
 
 	float() {
-		this.m_z = (36969 * (this.m_z & 65535) + (this.m_z >> 16)) & this.mask;
-		this.m_w = (18000 * (this.m_w & 65535) + (this.m_w >> 16)) & this.mask;
-		let result = ((this.m_z << 16) + (this.m_w & 65535)) >>> 0;
+		this.mZ = (36969 * (this.mZ & 65535) + (this.mZ >> 16)) & this.mask;
+		this.mW = (18000 * (this.mW & 65535) + (this.mW >> 16)) & this.mask;
+		let result = ((this.mZ << 16) + (this.mW & 65535)) >>> 0;
 		result /= 4294967296;
 		return result;
 	}

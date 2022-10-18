@@ -1,31 +1,299 @@
-The traveling salesman problems abide by a salesman and a set of cities. 
-The salesman has to visit every one of the cities starting from a certain one (e.g., the hometown) and to return to the same city. 
-We want the salesman to be as fresh (and as rich) as possible in the end of his trip.
+# Travelling Salesman Problem Solver
 
-Our newest task is another variation of the traveling salesman problem that is in general solvable by using the graph theory.
-Salesman world rules
-- There is a random m x n grid (i.e. 30 x 20), consists from 1 x 1 square cells. This is salesman’s world.
-- Salesman has no map when he appears in the world. That means he doesn’t know about the cities and walls location in advance and has to explore the map at first
-- Salesman is allowed to travel one cell at time - up, down, left and right. Not diagonally.
-- Anyway, Salesman can see what is in the all the adjacent cells around him, including diagonal ones.
-- Cell represents either the road (grass), the city, or the wall
-- Salesman cannot hit the wall, god mode is not allowed
-- Salesman will appear in random city at the start
+## Introduction
 
-Objectives - those are dependent, so start from #1, then #2 and then #3
-- Explore the whole map from the entry city to explore the whole world in the most effective way possible - by this, I mean to make sure every cell is visited.
-- When the exploration step is completed, find the shortest path back to the very first city where the salesman appeared.
-- When the salesman is back, the ultimate goal is to evaluate all costs (distance) permutations and pick the cheapest one so the salesman can save as much time as possible during his next trip, while visiting all cities again. EACH CITY CAN BE VISITED EXACTLY ONCE.
+This project provides a visual overview of several graph algorithms, namely: Depth-First Search, Dijkstra algorithm, Minimum Spanning Tree solver, and Travelling Salesman Problem solver
 
-Additional notes
-- There was a discussion about the potential visualisation using some graphical UI. This is completely optional, but nice to have.
-- There are no rules what tech stack you have to use. Use whatever you want.
-- Use any graph algorithms you believe will be suitable for those 3 steps (exploring, shortest path back, shortest possible trip route).
-- HINT: The last one will be the most complex and there is no need to be shy to use brute force :slightly_smiling_face: More info about the problem: https://www.geeksforgeeks.org/travelling-salesman-problem-set-1/
+You can try it out live [here](https://dodo.me/salesman/index.html)
+
+![screenshot1](./docs/scr1.png)
+
+### Task Description
+- There is a random MxN map that consists of three types of cells: road, wall, city. A wall cannot be crossed.
+- The Salesman starts in a random city and must first explore the map, as he/she doesn't know where the other cities are
+- The Salesman can only travel one cell at a time - up, down, left, and right (not diagonally)
+- The Salesman can only see the surrounding cells (including the diagonal ones)
+- **Flow**
+  1) The Salesman explores the map to find all cities
+  2) The Salesman then returns to the city where he/she first appeared
+  3) The Salesman then calculates the optimal solution on how to visit each city only once and return back to the first city
+
+### Installation
+- make sure you have [NodeJS](https://nodejs.org/en/download/) installed
+- install dependencies via `npm install`
+- run the visual part via `npm start`
+- run tests via `npm run test`
+- run the performance test via `npm run performance`
+
+### GUI
+- The GUI displays the following inputs:
+  - Map Width: width of the map, range 0-50
+  - Map Height: height of the map, range 0-50
+  - Random Seed: random seed for the map generator (should be a prime number)
+  - Start City: city number where the salesman starts (range 1 - #number of cities)
+  - Visual Speed: speed of the visual window
+  - Cities Density: density of cities (maximum number is 22)
+  - Walls Density: density of walls (maximum amount is 80% of all blocks)
+- Start button will run the simulation
+- **Visual Speed can be adjusted at any time**
+- The webpage is responsive and should work on mobile phones too
+
+![Screenshot2](./docs/scr2.png)
+
+### Flow
+1. A generator will generate a random map
+2. The Salesman (a white circle) will explore the map
+3. Dijkstra algorithm will find the best path to the first city
+4. The Salesman will walk to the first city
+5. MST algorithm will generate a minimum spanning tree
+6. TSP algorithm will find an optimal solution on how to visit the cities
+7. The Salesman will endlessly travel between cities in an optimal way
+
+#### Canvas
+- each cell has a label with its coordinates and cities have numbers (this feature is disabled for maps where at least one size is greater than 20 cells)
+- for some phases, the algorithm displays backtrace that leads to the previous milestone
+- milestones are used by DFS algorithm whenever the Salesman arrives at a cell from which there are more paths
+
+![Screenshot3](./docs/scr3.png)
+
+## Technical Details
+#### Libraries
+- TypeScript with vanilla DOM API
+- CanvasAPI for rendering
+- [jest](https://jestjs.io/) for testing
+- node-ts for running TypeScript from NodeJS (used only for the performance test)
+- [parcelJS](https://parceljs.org/) for bundling (it parses the index.html and compiles everything that is attached to it, including SASS and TS files)
+
+#### Project Structure
+```
+project
+│
+└───docs                    // screenshots
+│
+└───src                     // source code
+│   │
+│   └───algorithms          // implementation of all algorithms
+│   │
+│   └───renderers           // graphical part (canvas and UI renderer)
+│   │
+│   └───structs             // data structures and interfaces
+│   │
+│   └───tests               // automated tests
+│   │
+│   │   index.ts            // main entry for the web app
+|   |   runner.ts           // state machine that handles the whole flow
+|
+|   index.html              // html layout
+|   jest.config             // config for jest tests
+|   package.json            // npm scripts and dependencies
+│   README.md               // readme
+│   styles.scss             // SASS styles
+│   README.md               // README file
+│   tsconfig.json           // typescript config
+```
+
+#### Architecture
+- architecture-wise, the project follows a hybrid object-oriented approach with functional programming where it came in handy
+- all algorithms are implemented as generators, so that they can be easily interrupted
+- the whole flow is implemented as a state machine (`runner.ts`) that can run either inside an EventLoop (implemented by `CanvasRenderer`) or during a single loop (implemented by PerformanceLooper for performance tests)
+- every single state represents one part of the flow
+  - for instance, `ExploreState` will initialize the algorithm, repeatedly call its generator, and return back reporting data that will be used by the `CanvasRenderer`
+- `CanvasRenderer` uses a simple endless loop where it calls the state machine and collects data for rendering
+- when any of those states returns `null`, the state machine will move on to the next state
+
+## Algorithmic Details
+
+### Helping Structures and Algorithms
+- **Coord**
+  - 2D coordinates
+  - note that some parts use indices and some parts 2D coordinates
+  - **all arrays are one-dimensional**. Therefore, the algorithms need to recalculate 2D to 1D and vice- ersa
+- **Random Number Generator**
+  - in `algorithms/random-generator.ts`
+  - a simple Multiply-with-carry random generator. Implemented for the ability to use a random seed repeatedly
+- **Priority Queue**
+  - a simple FIFO queue with priorities for Dijsktra search
+- **Stack**
+  - a simple LIFO stack for DFS
+- **State Machine**
+  - a state machine with the possibility to be notified when a transition has taken place
+
+### Random Map Generator
+- in `algorithms/map-generator.ts`
+- a simple map generator that tries to generate a random map with a given number of cities and walls
+- it guarantees that there is a path between each two cities. However, it doesn't guarantee that all cells can be visited
+- walls are more likely put nearby other walls (e.g. 78% chance if there are 3 walls nearby)
+
+#### Known Issues
+- the generator is not very good for maps with a dense amount of walls, as it spends a lot of time trying to remove some of them to make all cities visitable
+- the distribution of walls looks a bit noisy. A more natural solution would be a simplex noise, voronoi cells, and the like
 
 
-The best approach (I am aware of) consists of running a 
-- Depth-First Branch-and-Bound heuristic search algorithm where the heuristic is the cost of the Minimum Spanning Tree (MST). 
-- Since the MST can be computed in polynomial time with either the Prim's algorithm or the Kruskal's algorithm, 
-- then it can be expected to return solutions in a reasonable amount of time. 
-- For a wonderful discussion of these two algorithms I do strongly suggest you to have a look at The Algorithm Design Manual
+![Screenshot4](./docs/scr4.png)
+
+### Map Exploration
+- in `algorithms/map-explorer.ts`
+- uses a variation of a Depth-First Search algorithm. It basically simulates the movement of ants.
+- whenever there is a cell from which there are more cells to visit, we create a "milestone" and put it onto a stack
+- to speed things up, when we are going back, the milestones around which all walls have already been visited, are discarded
+- works quite well for any map
+- the algorithm uses two sets: visited nodes and explored nodes. If we enter a cell, all surrounding cells will be marked explored
+- for exploration, we can use even diagonal cells. For movement, however, we can only go up, down, left, and right
+- the order in which the neighbors are taken into consideration is important, as it dictates how the algorithm will search the map
+  
+#### Known Issues
+- in some instances, when the map has almost been explored, there may remain a few unexplored "islands". The problem is that the algorithms doesn't know how to get to these islands, and starts backtracking until it explores the map completely
+- this results in weird "dizzy" movement. A solution could be to perfrom Dijkstra or AStar on a partially explored map
+
+
+![Screenshot5](./docs/scr5x.png)
+
+### Dijkstra Search
+- in `algorithms/path-finder`
+- a basic implementation of Dijkstra pathfinding algorithm with a priority queue
+- a heuristic function is the number of steps - to make one step, it takes `cost = 1`
+
+#### Known Issues
+- as it is a standard implementation, it always explores the full map, even if there can't be any better solution
+- the default implementation doesn't take into consideration the Euclidean topology of the map
+- a solution would be to stop the algorithm when the current cost-so-far is the same as a Manhattan distance between both points - this could save a few iterations on very sparse maps
+
+### Minimum Spanning Tree
+- in `algorithms/mst-finder.ts`
+- this algorithm uses Dijkstra to calculate the closest path from each city to all other cities
+- the output of this algorithm is a list of spanning trees for all cities that can be further used by TSP Solver
+
+### Travelling Salesman Problem Solver
+- in `algorithms/tsp-solver.ts`
+- an NP-complete problem solver that consumes an enormous amount of memory and takes ages to complete
+- we used dynamic programming with some recursive relation of sub-problems
+  - for `n` cities, there are `O(n * 2^n)` subproblems
+  - the total complexity is `O(n^2 * 2^n)` which is really terrible, but still better than `O(n!)`
+- to make the implementation as fast as possible, the algorithm uses bit masks and sparse arrays to memorize the subproblems. There are no 2D coordinates, only 1D masked numbers
+
+#### Known Limitations
+- even with dynamic programming, it is insanely slow (see the performance test below)
+- since it uses a bit array, the theoretical maximum number of cities is 64, yet with a common setup (2GB memory and i7 CPU), you will hardly go past 25 cities
+- the current algorithm expects that a minimal path from city A to city B can be different than the path from B to A. Therefore, it could have run a bit faster if this was taken out
+
+## Tests
+### Automated tests
+- all algorithms and data structures have a few tests in the `tests` folder
+- these tests work well while refactoring the algorithms, as they immediatelly find out if there is something wrong
+
+### Performance Testing
+
+- there are two main bottlenecks: map generator (rationale are described above) and TSP (you don't say)
+- all tests were conducted without the visual layout, on Intel Core i7-6800K 3.40 GHz, 6 Cores
+- **note that the visual part runs significantly slower, as it has to render the data**
+
+#### Common Variations
+- Dijkstra that searches for the way back and the MST generator didn't have any significant contributions to the total time
+- the following table displays the runs for various configurations of the map size, cities and walls 
+- map generator seems to take the most time, yet since its complexity is not exponential, TSP takes over when the number of cities exceeds 15
+- a reasonable configuration seems to be `mapSize ~ 20 x 20` with up to 50% walls and 15 cities - here the report shows varying results, probably due to certain bias that was introduced by randomness
+
+
+
+| Map Size   |   Cities (num)      |  Walls  | Generator / explore / TSP / total (ms) |
+|----------|:-------------:|:-------------:|------:|
+| 5x5 |  2 | 0 | 5 / 1 / 1 / 10 |
+| 5x5 |  2 | 10 | 2 / 1 / 1 / 5 |
+| 5x5 |  2 | 20 | 5 / 1 / 1 / 10 |
+| 5x5 |  3 | 0 | 0 / 3 / 1 / 5 |
+| 5x5 |  3 | 10 | 1 / 3 / 5 / 10 |
+| 5x5 |  3 | 20 | 0 / 0 / 1 / 1 |
+| 5x5 |  4 | 0 | 0 / 0 / 2 / 3 |
+| 5x5 |  4 | 10 | 0 / 0 / 1 / 1 |
+| 5x5 |  4 | 20 | 1 / 0 / 1 / 3 |
+| 10x10 |  3 | 0 | 1 / 1 / 0 / 3 |
+| 10x10 |  3 | 40 | 2 / 0 / 0 / 3 |
+| 10x10 |  3 | 80 | 10 / 0 / 0 / 12 |
+| 10x10 |  5 | 0 | 1 / 0 / 0 / 3 |
+| 10x10 |  5 | 40 | 2 / 0 / 0 / 4 |
+| 10x10 |  5 | 80 | 7 / 0 / 0 / 8 |
+| 10x10 |  7 | 0 | 1 / 1 / 0 / 3 |
+| 10x10 |  7 | 40 | 2 / 2 / 1 / 5 |
+| 10x10 |  7 | 80 | 8 / 0 / 2 / 10 |
+| 20x20 |  5 | 0 | 4 / 2 / 1 / 10 |
+| 20x20 |  5 | 160 | 27 / 1 / 1 / 30 |
+| 20x20 |  5 | 320 | 145 / 1 / 2 / 157 |
+| 20x20 |  9 | 0 | 2 / 3 / 2 / 10 |
+| 20x20 |  9 | 160 | 27 / 1 / 3 / 32 |
+| 20x20 |  9 | 320 | 72 / 0 / 1 / 75 |
+| 20x20 |  13 | 0 | 2 / 5 / 26 / 50 |
+| 20x20 |  13 | 160 | 27 / 1 / 14 / 43 |
+| 20x20 |  13 | 320 | 105 / 1 / 17 / 125 |
+| 30x30 |  7 | 0 | 6 / 12 / 3 / 27 |
+| 30x30 |  7 | 360 | 104 / 5 / 2 / 127 |
+| 30x30 |  7 | 720 | 484 / 4 / 2 / 492 |
+| 30x30 |  13 | 0 | 7 / 10 / 19 / 43 |
+| 30x30 |  13 | 360 | 107 / 1 / 17 / 131 |
+| 30x30 |  13 | 720 | 488 / 1 / 19 / 513 |
+| 30x30 |  19 | 0 | 8 / 10 / 2587 / 2615 |
+| 30x30 |  19 | 360 | 120 / 4 / 2501 / 2630 |
+| 30x30 |  19 | 720 | 535 / 2 / 2520 / 3061 |
+
+#### TSP test
+- there seems to be a boundary after which the complexity explodes - in this case it's around 18 cities
+- TSP doesn't work with the whole map, only with cities. Therefore, the number of walls doesn't have any significancy to the test.
+
+```
+Configuration:
+Map size: 30x30
+Cities:   variable
+Walls:    0
+```
+
+| Cities   |      Time (ms)      |  Heap (MB) |
+|----------|:-------------:|------:|
+| 3 |  4 | 136 |
+| 4 |  4 | 144 |
+| 5|  4 | 135 |
+| 6 |  4 | 136 |
+| 7 |  4 | 140 |
+| 8 |  6 | 137 |
+| 9 |  6 | 133 |
+| 10 |  10 | 149 |
+| 11 |  15 | 146 |
+| 12 |  15 | 140 |
+| 13 |  19 | 147 |
+| 14 |  39 | 154 |
+| 15 |  88 | 154 |
+| 16 |  186 | 148 |
+| 17 | 430 | 157 |
+| 18 | 1175 | 213 |
+| 19 |  2546 | 353 |
+| 20 |  6153 | 389 |
+| 21 | 15540 | 986 |
+| 22 | 36532 | 2322 |
+
+#### Map Generator test
+- the generator seems to have problems with dense maps, as it needs significantly more iterations to find a proper spot for the remaining walls
+- the complexity, however, seems to be linear up to 90% wall density. From 90% onward, it becomes quadratic.  
+
+```
+Configuration:
+Map size: 100x100
+Cities:   2
+Walls:    variable
+```
+
+| Walls   |      Time (ms)      |  Heap (MB) |
+|----------|:-------------:|------:|
+| 0 |  155 | 136 |
+| 400 |  1427 | 169 |
+| 800  |  2528 | 181 |
+| 1200 | 3769  | 198 |
+| 1600 |  5050 | 156 |
+| 2000 |  6875 | 172 |
+| 2400 |  7487 | 199 |
+| 2800 |  8986 | 219 |
+| 3200 |  10158 | 235 |
+| 3600 |  11348 | 258 |
+| 4000 |  12832 | 276 |
+| 4400 |  16202 | 146 |
+| 4800 |  26458 | 376 |
+| 5200 |  23091 | 521 |
+| 5600 | 24151 | 427 |
+| 6000 | 29071 | 521 |

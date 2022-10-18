@@ -74,12 +74,18 @@ export const coordBottomRight = (coord: Coord) => {
 	}
 }
 
+/**
+ * Returns true if they the parameters are neighbours (does not include diagonals)
+ */
 export const isDirectionalNeighbor = (a: Coord, b: Coord) => {
 	const distX = Math.abs(a.x - b.x);
 	const distY = Math.abs(a.y - b.y);
 	return distX <= 1 && distY <= 1 && distX !== distY;
 }
 
+/**
+ * Calculates Manhattan distance
+ */
 export const manhattanDist = (a: Coord, b: Coord) => {
 	return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }

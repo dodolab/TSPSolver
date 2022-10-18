@@ -2,6 +2,9 @@ import { Coord } from '../structs/coord';
 import { MapGrid } from '../structs/map-grid';
 import { PriorityQueue } from '../structs/priority-queue';
 
+/**
+ * Reporting structure for the generator
+ */
 export type PathFinderEvent = {
 	currentCoord: Coord;
 }
@@ -70,7 +73,7 @@ export class PathFinder {
 		return null;
 	}
 
-	backtracePath(start: Coord, end: Coord, map: MapGrid) {
+	private backtracePath(start: Coord, end: Coord, map: MapGrid) {
 		const startIndex = map.coordToIndex(start);
 		const endIndex = map.coordToIndex(end);
 

@@ -1,6 +1,6 @@
-
-// https://www.interviewbit.com/blog/travelling-salesman-problem/
-
+/**
+ * Reporting structure for the generator
+ */
 export type TSPEvent = {
 	currentCity: number;
 	nextCity: number;
@@ -44,6 +44,14 @@ export class TSPSolver {
 		this.citiesNum = citiesNum;
 		this.startCityIndex = startCityIndex;
 		this.reset(citiesNum);
+
+		if(citiesNum === 1) {
+			// trivial case
+			this.tour.push(startCityIndex);
+			this.tour.push(startCityIndex);
+			this.minTourCost = 0;
+			return null;
+		}
 
 		// add all outgoing edges from the starting node to memo table.
 		for (let cityIndex = 0; cityIndex < this.citiesNum; cityIndex++) {
