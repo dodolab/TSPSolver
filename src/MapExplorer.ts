@@ -1,116 +1,116 @@
-import { Coord } from './Coord';
+import { Coord, makeCoord, coordEq, isDirectionalNeighbor } from './Coord';
 import { MapGrid } from './MapGrid';
 import { Stack } from './Stack';
 import { TileType, MapTile } from './MapTile';
 
-export type MapExploreStatus = {
+export type ExploreEvent = {
 	type: 'GOTO' | 'EXPLORE';
 	tile: MapTile;
 }
 
-export interface MapExplorerObserver {
-	onGoto(coord: Coord);
-	onExplore(coord: Coord, tileType: TileType);
-}
-
 export class MapExplorer {
+	// current position
 	current: Coord;
+	// blind map that gets gradually explored
 	blindMap: MapGrid;
-	backTrack: { [key: number]: number} = {};
+	// helping structure for backtracing to the previous milestone on the stack
+	backTrack: Map<number, number>;
+	// stack of checkpoints
 	checkpointStack: Stack<Coord>;
-	visitedNodes = new Set();
-	exploredNodes = new Set();
+	visitedNodes: Set<number>;
+	exploredNodes: Set<number>;
 
 	constructor(width: number, height: number) {
 		this.blindMap = new MapGrid(width, height);
 		for (let i = 0; i < width; i++) {
 			for (let j = 0; j < height; j++) {
-				this.blindMap.setTile(new Coord(i, j), 'UNKNOWN');
+				this.blindMap.setTile(makeCoord(i, j), 'UNKNOWN');
 			}
 		}
 	}
 
-	exploreMapAll(startCoord: Coord, map: MapGrid) {
-		const generator = this.exploreMap(startCoord, map);
+	exploreMap(startCoord: Coord, map: MapGrid): MapGrid {
+		const generator = this.exploreMapIteratively(startCoord, map);
 		let val = generator.next();
-		while(!val.done) {
+		while (!val.done) {
 			val = generator.next();
 		}
+		// return explored map
+		return this.blindMap;
 	}
 
-	*exploreMap(startCoord: Coord, map: MapGrid): Generator<MapExploreStatus, MapExploreStatus, MapExploreStatus> {
-		this.backTrack = {};
-		this.visitedNodes = new Set();
-		this.exploredNodes = new Set();
-		this.blindMap.generateNeighbors();
+	*exploreMapIteratively(startCoord: Coord, map: MapGrid): Generator<ExploreEvent, ExploreEvent, void> {
+		this.reset();
 		this.current = startCoord;
 
-
+		// visit the starting node
 		this.exploreTile(startCoord, map.getTile(startCoord).type);
 		this.visitNewNode(startCoord);
-
-		this.checkpointStack = new Stack<Coord>();
 		this.checkpointStack.push(this.current);
 
+		// we go forward and when we need to go back, we will use the stack
 		let canWalkForward = false;
 
 		while (!this.checkpointStack.isEmpty() || canWalkForward) {
-			// 1) walk to the last checkpoint
-			let currentTile: MapTile = null;
 
-			if(!canWalkForward) {	
+			if (!canWalkForward) {
 				let lastCheckpoint = this.checkpointStack.pop();
 
 				// a little twist -> this will ignore milestones around which all cells have already been discovered
-				while(!map.getTile(lastCheckpoint).directionalNeighbors.find(neigh => neigh && neigh.isWalkable && !this.isVisited(neigh.coord))) {
-					if(this.checkpointStack.isEmpty()) {
+				while (!map.getTile(lastCheckpoint).directionalNeighbors
+					.find(neigh => neigh && neigh.isWalkable && !this.isVisited(neigh.coord))) {
+
+					if (this.checkpointStack.isEmpty()) {
+						// algorithm termination
 						return null;
 					}
 					lastCheckpoint = this.checkpointStack.pop();
 				}
 
-				const backTrace = this.backTrace(lastCheckpoint);
-	
-				for(let coord of backTrace) {
+				const pathToLastCheckpoint = this.backTrace(lastCheckpoint);
+
+				//walk to the last checkpoint
+				for (let coord of pathToLastCheckpoint) {
 					this.current = coord;
-					currentTile = map.getTile(coord);
 					yield {
 						type: 'GOTO',
-						tile: currentTile
+						tile: map.getTile(coord)
 					}
 				}
-			} else {
-				currentTile = map.getTile(this.current); 
 			}
 
-			// 2) walk to the first walkable neighbour
-			const neighbors = currentTile.directionalNeighbors; // this order is important!
+			let currentTile = map.getTile(this.current);
+			// this order is important!
+			const neighbors = currentTile.neighborsArr;
+
 			let neighbourToWalk: Coord = null;
-			let neighboursToWalk = 0;
+			let neighboursToWalkCnt = 0;
 
 			for (let neigh of neighbors) {
+				// if we are close to map boundaries, some neighbours can be undefined 
 				if (neigh) {
-					if(!this.isExplored(neigh.coord)) {
+					if (!this.isExplored(neigh.coord)) {
 						this.exploreTile(neigh.coord, neigh.type);
 						yield {
 							type: 'EXPLORE',
 							tile: neigh
 						}
 					}
-					if(!this.isVisited(neigh.coord) && neigh.isWalkable) {
+
+					if (neigh.isWalkable && isDirectionalNeighbor(neigh.coord, this.current) && !this.isVisited(neigh.coord)) {
 						neighbourToWalk = neigh.coord;
-						neighboursToWalk++;
+						neighboursToWalkCnt++;
 					}
 				}
 			}
 
-			if(neighboursToWalk > 1) {
-				// we push the CROSSROAD to the stack (not the neighbour)
-				// due to backtracking to the last milestone
+			if (neighboursToWalkCnt > 1) {
+				// more than one neighbour -> we need to save a checkpoint
+				// for backtracking
 				this.checkpointStack.push(this.current);
 			}
 
-			if(neighbourToWalk) {
+			if (neighbourToWalk) {
 				canWalkForward = true;
 				this.visitNewNode(neighbourToWalk);
 				yield {
@@ -122,55 +122,57 @@ export class MapExplorer {
 			}
 		}
 
+		// generate neighbours as we have already discovered all cells
 		this.blindMap.generateNeighbors();
-		// at this moment, the salesman knows the map
-		// let's use dijsktra to find the shortest path from A to B
 		return null;
 	}
 
-	private updateBackTrack(from: Coord, to: Coord) {
-		this.backTrack[this.coordToIndex(to)] = this.coordToIndex(from);
-	}
+	private backTrace(target: Coord): Coord[] {
 
-	private backTrace(newCoord: Coord): Coord[] {
-		// first run
-		if(newCoord.eq(this.current)) {
-			return [newCoord];
+		if (coordEq(target, this.current)) {
+			// trivial solution -> staying on the same place
+			return [target];
 		}
 
-		if (this.blindMap.getTile(newCoord).type === 'UNKNOWN') {
-			throw new Error('I don\'t know what is there!');
-		}
-		if (!this.blindMap.getTile(newCoord).isWalkable) {
-			throw new Error('I can\'t go there!');
+		if (this.blindMap.getTile(target).type === 'UNKNOWN') {
+			throw new Error(`Can\'t walk to an unknown area: [${target.x},${target.y}]`);
 		}
 
-		const distX = Math.abs(newCoord.x - this.current.x);
-		const distY = Math.abs(newCoord.y - this.current.y);
-		const isNeighbor = distX <= 1 && distY <= 1 && distX !== distY; // ignore diagonal 
-		if(isNeighbor) {
-			return [newCoord]
+		if (isDirectionalNeighbor(target, this.current)) {
+			// semi-trivial solution - going one cell back
+			return [target];
 		} else {
-			// we need to backtrack			
-			const output = [];
-			let step = this.backTrack[this.coordToIndex(this.current)];
+			// iterative backtracking
+			const path = [];
+			let nextStep = this.backTrack.get(this.coordToIndex(this.current));
+			const toIndex = this.coordToIndex(target);
 
-			const toIndex = this.coordToIndex(newCoord);
-
-			while(true) {
-				const stepCoord = this.blindMap.indexToCoord(step);
-				output.push(stepCoord);
-				if(step === toIndex) {
+			let overFlowCheck = 0;
+			while (true) {
+				path.push(this.indexToCoord(nextStep));
+				if (nextStep === toIndex) {
 					break;
 				}
-				step = this.backTrack[step];
+				nextStep = this.backTrack.get(nextStep);
+
+				if(overFlowCheck++ >= this.blindMap.width * this.blindMap.height) {
+					throw new Error(`Backtrace got in an infinite loop for [${target.x},${target.y}]`);
+				}
 			}
-			return output;
+			return path;
 		}
 	}
 
-	coordToIndex = (coord: Coord): number => this.blindMap.coordToIndex(coord);
-	indexToCoord = (index: number): Coord => this.blindMap.indexToCoord(index);
+	private coordToIndex = (coord: Coord): number => this.blindMap.coordToIndex(coord);
+	private indexToCoord = (index: number): Coord => this.blindMap.indexToCoord(index);
+
+	private reset() {
+		this.backTrack = new Map();;
+		this.visitedNodes = new Set();
+		this.exploredNodes = new Set();
+		this.blindMap.generateNeighbors();
+		this.checkpointStack = new Stack<Coord>();
+	}
 
 	private isVisited(coord: Coord) {
 		return this.visitedNodes.has(this.coordToIndex(coord));
@@ -178,8 +180,9 @@ export class MapExplorer {
 
 	private visitNewNode(coord: Coord) {
 		this.visitedNodes.add(this.coordToIndex(coord));
-		if(!this.current.eq(coord)) {
-			this.updateBackTrack(this.current, coord);
+		if (!coordEq(this.current, coord)) {
+			// update backtrack
+			this.backTrack.set(this.coordToIndex(coord), this.coordToIndex(this.current));
 		}
 		this.current = coord;
 	}

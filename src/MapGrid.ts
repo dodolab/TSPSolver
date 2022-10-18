@@ -1,86 +1,79 @@
-import { Coord } from './Coord';
+import {
+	Coord,
+	makeCoord,
+	coordLeft,
+	coordRight,
+	coordTop,
+	coordBottom,
+	coordTopLeft,
+	coordTopRight,
+	coordBottomLeft,
+	coordBottomRight
+} from './Coord';
 import { MapTile, TileType } from './MapTile';
 
 export type Neighbor = 'left' | 'right' | 'top' | 'bottom' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 
+/**
+ * 2D map structure
+ */
 export class MapGrid {
 	mapArray: MapTile[] = [];
 	width: number;
 	height: number;
-    neighborsGenerated = false;
+	neighborsGenerated = false;
 
 	constructor(width: number, height: number) {
 		this.width = width;
 		this.height = height;
 	}
-		
+
 	coordToIndex = (coord: Coord): number => {
 		const { x, y } = coord;
 		if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
-			return -1;
+			throw new Error(`Coordinate [${coord.x},${coord.y}] outside the boundaries!`);
 		}
 		return y * this.width + x;
 	}
 
 	indexToCoord = (x: number): Coord => {
-		return new Coord(x % this.width, Math.floor(x / this.width));
+		return makeCoord(x % this.width, Math.floor(x / this.width));
 	}
 
-	isInside = (coord: Coord) => {
+	isInsideMap = (coord: Coord) => {
 		return coord.x >= 0 && coord.y >= 0 && coord.x < this.width && coord.y < this.height;
+	}
+
+	getTile(coord: Coord) {
+		if (!this.isInsideMap(coord)) {
+			return null;
+		}
+		return this.mapArray[this.coordToIndex(coord)];
 	}
 
 	setTile(coord: Coord, type: TileType) {
 		this.mapArray[this.coordToIndex(coord)] = new MapTile(coord, type);
 	}
 
-	getTile(coord: Coord) {
-		if(!this.isInside(coord)) {
-			return null;
-		}
-		return this.mapArray[this.coordToIndex(coord)];
-	}
-
 	generateNeighbors() {
-		for(let tile of this.mapArray) {
-			// tile will contain links to all neighbors
+		for (let tile of this.mapArray) {
+			// this structure is not actually needed
 			tile.neighbors = {
-				left: this.getTile(tile.coord.left()),
-				right: this.getTile(tile.coord.right()),
-				top: this.getTile(tile.coord.top()),
-				bottom: this.getTile(tile.coord.bottom()),
-				topLeft: this.getTile(tile.coord.topLeft()),
-				topRight: this.getTile(tile.coord.topRight()),
-				bottomLeft: this.getTile(tile.coord.bottomLeft()),
-				bottomRight: this.getTile(tile.coord.bottomRight()),
+				left: this.getTile(coordLeft(tile.coord)),
+				right: this.getTile(coordRight(tile.coord)),
+				top: this.getTile(coordTop(tile.coord)),
+				bottom: this.getTile(coordBottom(tile.coord)),
+				topLeft: this.getTile(coordTopLeft(tile.coord)),
+				topRight: this.getTile(coordTopRight(tile.coord)),
+				bottomLeft: this.getTile(coordBottomLeft(tile.coord)),
+				bottomRight: this.getTile(coordBottomRight(tile.coord)),
 			}
-			// this order is very important!!!
-			tile.directionalNeighbors = [tile.neighbors.top, tile.neighbors.left, tile.neighbors.bottom, tile.neighbors.right]
-		}
-        this.neighborsGenerated = true;
-	}
+			// this order is very important
+			tile.directionalNeighbors = [tile.neighbors.top, tile.neighbors.left, tile.neighbors.bottom, tile.neighbors.right];
 
-	print() {
-		let otp = "";
-		this.mapArray.forEach((val, index) => {
-			switch(val.type) {
-				case 'CITY':
-					otp += 'o';
-				break;
-				case 'WALL':
-					otp += 'x';
-				break;
-				case 'ROAD':
-					otp += '.';
-				break;
-				case 'UNKNOWN':
-					otp += '?';
-				break;
-			}
-			if (index !== 0 && ((index + 1) % this.width) === 0) {
-				otp += '\n';
-			}
-		});
-		return otp;
+			tile.neighborsArr = [tile.neighbors.top, tile.neighbors.left, tile.neighbors.bottom, tile.neighbors.right,
+			tile.neighbors.topLeft, tile.neighbors.topRight, tile.neighbors.bottomLeft, tile.neighbors.bottomRight]
+		}
+		this.neighborsGenerated = true;
 	}
 }

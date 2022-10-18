@@ -1,11 +1,10 @@
-import { Coord } from './Coord';
+/**
+ * Priority queue that stores generic nodes and their priorities
+ */;
+export class PriorityQueue<T> {
+	collection: [T, number] [] = [];
 
-export class PriorityQueue {
-	collection: [Coord, number] [] = [];
-
-	// we store [index, priority]
-    // todo we only have 2 priorities: 0, 1
-	enqueue(element: Coord, priority: number = 0) {
+	enqueue(element: T, priority: number = 0) {
 		if (this.isEmpty) {
 			this.collection.push([element, priority]);
 		} else {
@@ -23,9 +22,9 @@ export class PriorityQueue {
 		}
 	}
 
-	dequeue() {
+	dequeue(): T {
 		let value = this.collection.shift();
-		return value;
+		return value[0];
 	}
 
 	get isEmpty() {

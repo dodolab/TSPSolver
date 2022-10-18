@@ -646,19 +646,18 @@ const realMap = new (0, _mapGrid.MapGrid)(WIDTH, HEIGHT);
 for(let i = 0; i < HEIGHT; i++)for(let j = 0; j < WIDTH; j++)// repeat pattern from the map above
 switch(arr[10 * (i % 10) + j % 10]){
     case ".":
-        realMap.setTile(new (0, _coord.Coord)(j, i), "ROAD");
+        realMap.setTile((0, _coord.makeCoord)(j, i), "ROAD");
         break;
     case "x":
-        realMap.setTile(new (0, _coord.Coord)(j, i), "WALL");
+        realMap.setTile((0, _coord.makeCoord)(j, i), "WALL");
         break;
     case "o":
-        realMap.setTile(new (0, _coord.Coord)(j, i), "CITY");
+        realMap.setTile((0, _coord.makeCoord)(j, i), "CITY");
         break;
     default:
         throw new Error("Unknown map tile");
 }
 realMap.generateNeighbors();
-console.log(realMap.print());
 const getStartingCity = ()=>{
     console.log("Finding a starting city:");
     const cities = realMap.mapArray.filter((a)=>a.type === "CITY").length;
@@ -666,13 +665,11 @@ const getStartingCity = ()=>{
     const randomLoc = Math.floor(cities / 2);
     let cnt = 0;
     const cityTile = realMap.mapArray.find((val)=>val.type === "CITY" && ++cnt === randomLoc);
-    console.log("Initial pos: ");
-    console.log(cityTile.coord.print());
     return cityTile;
 };
 const originalCoord = getStartingCity();
 const explorer = new (0, _mapExplorer.MapExplorer)(WIDTH, HEIGHT);
-const gen = explorer.exploreMap(originalCoord.coord, realMap);
+const gen = explorer.exploreMapIteratively(originalCoord.coord, realMap);
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const canvasWidth = canvas.width;
@@ -681,7 +678,7 @@ const drawCanvas = ()=>{
     const stack = explorer.checkpointStack.getNodes();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for(let i = 0; i < WIDTH; i++)for(let j = 0; j < HEIGHT; j++){
-        const coord = new (0, _coord.Coord)(i, j);
+        const coord = (0, _coord.makeCoord)(i, j);
         const tile = explorer.blindMap.getTile(coord);
         switch(tile.type){
             case "UNKNOWN":
@@ -697,7 +694,7 @@ const drawCanvas = ()=>{
                 ctx.fillStyle = "#CD444455";
                 break;
         }
-        if (explorer.current.eq(tile.coord)) ctx.fillStyle = "#EFEFEF";
+        if ((0, _coord.coordEq)(explorer.current, tile.coord)) ctx.fillStyle = "#EFEFEF";
         const blockSize = canvasWidth / WIDTH;
         ctx.fillRect(i * blockSize, j * blockSize, blockSize - 1, blockSize - 1);
         const ratio = WIDTH / 10;
@@ -705,9 +702,9 @@ const drawCanvas = ()=>{
             ctx.font = `${18 / ratio}px courier new`;
             ctx.fillStyle = "#FFFFFF";
             ctx.fillText(`[${i},${j}]`, i * blockSize + 10 / ratio, j * blockSize + 45 / ratio);
-            const backTrace = explorer.backTrack[explorer.coordToIndex(coord)];
+            const backTrace = explorer.backTrack[realMap.coordToIndex(coord)];
             if (backTrace) {
-                const toCoord = explorer.indexToCoord(backTrace);
+                const toCoord = realMap.indexToCoord(backTrace);
                 const isLeft = toCoord.x === coord.x - 1;
                 const isRight = toCoord.x === coord.x + 1;
                 const isTop = toCoord.y === coord.y - 1;
@@ -717,7 +714,7 @@ const drawCanvas = ()=>{
                 ctx.font = `${30 / ratio}px courier new`;
                 ctx.fillText(symbol, i * blockSize + 30 / ratio, j * blockSize + 70 / ratio);
             }
-            const isInStack = stack.find((t)=>t.eq(coord));
+            const isInStack = stack.find((t)=>(0, _coord.coordEq)(t, coord));
             if (isInStack) {
                 ctx.fillStyle = "#ADADAD";
                 ctx.fillRect(i * blockSize, j * blockSize, 10 / ratio, 10 / ratio);
@@ -768,7 +765,7 @@ let interval = setInterval(()=>{
         }
         console.log(print);
         // 2) find solution for that spanning tree
-        const cityWhereWeAre = cities.findIndex((c)=>c.coord.eq(originalCoord.coord));
+        const cityWhereWeAre = cities.findIndex((c)=>(0, _coord.coordEq)(c.coord, originalCoord.coord));
         new (0, _tsp.TSP)(distanceArray, citiesCnt, citiesCnt).TSP(cityWhereWeAre);
     } else lastCoord = status.value.tile.coord;
 }, 20); // another ideas:
@@ -778,7 +775,9 @@ let interval = setInterval(()=>{
 },{"./MapGrid":"5i7Xm","./Coord":"hANUT","./MapExplorer":"fzWxn","./PathFinder":"i3Uq0","./TSP":"j9PIn"}],"5i7Xm":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
+/**
+ * 2D map structure
+ */ parcelHelpers.export(exports, "MapGrid", ()=>MapGrid);
 var _coord = require("./Coord");
 var _mapTile = require("./MapTile");
 class MapGrid {
@@ -790,120 +789,133 @@ class MapGrid {
     }
     coordToIndex = (coord)=>{
         const { x , y  } = coord;
-        if (x < 0 || y < 0 || x >= this.width || y >= this.height) return -1;
+        if (x < 0 || y < 0 || x >= this.width || y >= this.height) throw new Error(`Coordinate [${coord.x},${coord.y}] outside the boundaries!`);
         return y * this.width + x;
     };
     indexToCoord = (x)=>{
-        return new (0, _coord.Coord)(x % this.width, Math.floor(x / this.width));
+        return (0, _coord.makeCoord)(x % this.width, Math.floor(x / this.width));
     };
-    isInside = (coord)=>{
+    isInsideMap = (coord)=>{
         return coord.x >= 0 && coord.y >= 0 && coord.x < this.width && coord.y < this.height;
     };
+    getTile(coord) {
+        if (!this.isInsideMap(coord)) return null;
+        return this.mapArray[this.coordToIndex(coord)];
+    }
     setTile(coord, type) {
         this.mapArray[this.coordToIndex(coord)] = new (0, _mapTile.MapTile)(coord, type);
     }
-    getTile(coord) {
-        if (!this.isInside(coord)) return null;
-        return this.mapArray[this.coordToIndex(coord)];
-    }
     generateNeighbors() {
         for (let tile of this.mapArray){
-            // tile will contain links to all neighbors
+            // this structure is not actually needed
             tile.neighbors = {
-                left: this.getTile(tile.coord.left()),
-                right: this.getTile(tile.coord.right()),
-                top: this.getTile(tile.coord.top()),
-                bottom: this.getTile(tile.coord.bottom()),
-                topLeft: this.getTile(tile.coord.topLeft()),
-                topRight: this.getTile(tile.coord.topRight()),
-                bottomLeft: this.getTile(tile.coord.bottomLeft()),
-                bottomRight: this.getTile(tile.coord.bottomRight())
+                left: this.getTile((0, _coord.coordLeft)(tile.coord)),
+                right: this.getTile((0, _coord.coordRight)(tile.coord)),
+                top: this.getTile((0, _coord.coordTop)(tile.coord)),
+                bottom: this.getTile((0, _coord.coordBottom)(tile.coord)),
+                topLeft: this.getTile((0, _coord.coordTopLeft)(tile.coord)),
+                topRight: this.getTile((0, _coord.coordTopRight)(tile.coord)),
+                bottomLeft: this.getTile((0, _coord.coordBottomLeft)(tile.coord)),
+                bottomRight: this.getTile((0, _coord.coordBottomRight)(tile.coord))
             };
-            // this order is very important!!!
+            // this order is very important
             tile.directionalNeighbors = [
                 tile.neighbors.top,
                 tile.neighbors.left,
                 tile.neighbors.bottom,
                 tile.neighbors.right
             ];
+            tile.neighborsArr = [
+                tile.neighbors.top,
+                tile.neighbors.left,
+                tile.neighbors.bottom,
+                tile.neighbors.right,
+                tile.neighbors.topLeft,
+                tile.neighbors.topRight,
+                tile.neighbors.bottomLeft,
+                tile.neighbors.bottomRight
+            ];
         }
         this.neighborsGenerated = true;
-    }
-    print() {
-        let otp = "";
-        this.mapArray.forEach((val, index)=>{
-            switch(val.type){
-                case "CITY":
-                    otp += "o";
-                    break;
-                case "WALL":
-                    otp += "x";
-                    break;
-                case "ROAD":
-                    otp += ".";
-                    break;
-                case "UNKNOWN":
-                    otp += "?";
-                    break;
-            }
-            if (index !== 0 && (index + 1) % this.width === 0) otp += "\n";
-        });
-        return otp;
     }
 }
 
 },{"./Coord":"hANUT","./MapTile":"4h6t3","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hANUT":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-/**
- * 2D map Coordinate
- */ parcelHelpers.export(exports, "Coord", ()=>Coord);
-class Coord {
-    constructor(x, y){
-        this._x = x;
-        this._y = y;
-    }
-    get x() {
-        return this._x;
-    }
-    get y() {
-        return this._y;
-    }
-    /**
-	 * Checks whether the coordinate is equal to the one passed as a parameter
-	 * @param other 
-	 * @returns true if same
-	 */ eq(other) {
-        return this.x === other.x && this.y === other.y;
-    }
-    left() {
-        return new Coord(this.x - 1, this.y);
-    }
-    right() {
-        return new Coord(this.x + 1, this.y);
-    }
-    top() {
-        return new Coord(this.x, this.y - 1);
-    }
-    bottom() {
-        return new Coord(this.x, this.y + 1);
-    }
-    topLeft() {
-        return new Coord(this.x - 1, this.y - 1);
-    }
-    topRight() {
-        return new Coord(this.x + 1, this.y - 1);
-    }
-    bottomLeft() {
-        return new Coord(this.x - 1, this.y + 1);
-    }
-    bottomRight() {
-        return new Coord(this.x + 1, this.y + 1);
-    }
-    print() {
-        return `[${this.x},${this.y}]`;
-    }
-}
+parcelHelpers.export(exports, "makeCoord", ()=>makeCoord);
+parcelHelpers.export(exports, "coordEq", ()=>coordEq);
+parcelHelpers.export(exports, "coordLeft", ()=>coordLeft);
+parcelHelpers.export(exports, "coordRight", ()=>coordRight);
+parcelHelpers.export(exports, "coordTop", ()=>coordTop);
+parcelHelpers.export(exports, "coordBottom", ()=>coordBottom);
+parcelHelpers.export(exports, "coordTopLeft", ()=>coordTopLeft);
+parcelHelpers.export(exports, "coordTopRight", ()=>coordTopRight);
+parcelHelpers.export(exports, "coordBottomLeft", ()=>coordBottomLeft);
+parcelHelpers.export(exports, "coordBottomRight", ()=>coordBottomRight);
+parcelHelpers.export(exports, "isDirectionalNeighbor", ()=>isDirectionalNeighbor);
+const makeCoord = (x, y)=>{
+    return {
+        x,
+        y
+    };
+};
+const coordEq = (a, b)=>{
+    return a.x === b.x && a.y === b.y;
+};
+const coordLeft = (coord)=>{
+    return {
+        x: coord.x - 1,
+        y: coord.y
+    };
+};
+const coordRight = (coord)=>{
+    return {
+        x: coord.x + 1,
+        y: coord.y
+    };
+};
+const coordTop = (coord)=>{
+    return {
+        x: coord.x,
+        y: coord.y - 1
+    };
+};
+const coordBottom = (coord)=>{
+    return {
+        x: coord.x,
+        y: coord.y + 1
+    };
+};
+const coordTopLeft = (coord)=>{
+    return {
+        x: coord.x - 1,
+        y: coord.y - 1
+    };
+};
+const coordTopRight = (coord)=>{
+    return {
+        x: coord.x + 1,
+        y: coord.y - 1
+    };
+};
+const coordBottomLeft = (coord)=>{
+    return {
+        x: coord.x - 1,
+        y: coord.y + 1
+    };
+};
+const coordBottomRight = (coord)=>{
+    return {
+        x: coord.x + 1,
+        y: coord.y + 1
+    };
+};
+const isDirectionalNeighbor = (a, b)=>{
+    const distX = Math.abs(a.x - b.x);
+    const distY = Math.abs(a.y - b.y);
+    return distX <= 1 && distY <= 1 && distX !== distY;
+};
 
 },{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"gkKU3":[function(require,module,exports) {
 exports.interopDefault = function(a) {
@@ -938,7 +950,9 @@ exports.export = function(dest, destName, get) {
 },{}],"4h6t3":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "MapTile", ()=>MapTile);
+/**
+ * Structure for map tiles, keeping references to all neighbours
+ */ parcelHelpers.export(exports, "MapTile", ()=>MapTile);
 class MapTile {
     constructor(coord, type){
         this.coord = coord;
@@ -957,54 +971,52 @@ var _coord = require("./Coord");
 var _mapGrid = require("./MapGrid");
 var _stack = require("./Stack");
 class MapExplorer {
-    backTrack = {};
-    visitedNodes = new Set();
-    exploredNodes = new Set();
     constructor(width, height){
         this.blindMap = new (0, _mapGrid.MapGrid)(width, height);
-        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++)this.blindMap.setTile(new (0, _coord.Coord)(i, j), "UNKNOWN");
+        for(let i = 0; i < width; i++)for(let j = 0; j < height; j++)this.blindMap.setTile((0, _coord.makeCoord)(i, j), "UNKNOWN");
     }
-    exploreMapAll(startCoord, map) {
-        const generator = this.exploreMap(startCoord, map);
+    exploreMap(startCoord, map) {
+        const generator = this.exploreMapIteratively(startCoord, map);
         let val = generator.next();
         while(!val.done)val = generator.next();
+        // return explored map
+        return this.blindMap;
     }
-    *exploreMap(startCoord, map) {
-        this.backTrack = {};
-        this.visitedNodes = new Set();
-        this.exploredNodes = new Set();
-        this.blindMap.generateNeighbors();
+    *exploreMapIteratively(startCoord, map) {
+        this.reset();
         this.current = startCoord;
+        // visit the starting node
         this.exploreTile(startCoord, map.getTile(startCoord).type);
         this.visitNewNode(startCoord);
-        this.checkpointStack = new (0, _stack.Stack)();
         this.checkpointStack.push(this.current);
+        // we go forward and when we need to go back, we will use the stack
         let canWalkForward = false;
         while(!this.checkpointStack.isEmpty() || canWalkForward){
-            // 1) walk to the last checkpoint
-            let currentTile = null;
             if (!canWalkForward) {
                 let lastCheckpoint = this.checkpointStack.pop();
                 // a little twist -> this will ignore milestones around which all cells have already been discovered
                 while(!map.getTile(lastCheckpoint).directionalNeighbors.find((neigh)=>neigh && neigh.isWalkable && !this.isVisited(neigh.coord))){
-                    if (this.checkpointStack.isEmpty()) return null;
+                    if (this.checkpointStack.isEmpty()) // algorithm termination
+                    return null;
                     lastCheckpoint = this.checkpointStack.pop();
                 }
-                const backTrace = this.backTrace(lastCheckpoint);
-                for (let coord of backTrace){
+                const pathToLastCheckpoint = this.backTrace(lastCheckpoint);
+                //walk to the last checkpoint
+                for (let coord of pathToLastCheckpoint){
                     this.current = coord;
-                    currentTile = map.getTile(coord);
                     yield {
                         type: "GOTO",
-                        tile: currentTile
+                        tile: map.getTile(coord)
                     };
                 }
-            } else currentTile = map.getTile(this.current);
-            // 2) walk to the first walkable neighbour
-            const neighbors = currentTile.directionalNeighbors; // this order is important!
+            }
+            let currentTile = map.getTile(this.current);
+            // this order is important!
+            const neighbors = currentTile.neighborsArr;
             let neighbourToWalk = null;
-            let neighboursToWalk = 0;
-            for (let neigh of neighbors)if (neigh) {
+            let neighboursToWalkCnt = 0;
+            for (let neigh of neighbors)// if we are close to map boundaries, some neighbours can be undefined 
+            if (neigh) {
                 if (!this.isExplored(neigh.coord)) {
                     this.exploreTile(neigh.coord, neigh.type);
                     yield {
@@ -1012,13 +1024,13 @@ class MapExplorer {
                         tile: neigh
                     };
                 }
-                if (!this.isVisited(neigh.coord) && neigh.isWalkable) {
+                if (neigh.isWalkable && (0, _coord.isDirectionalNeighbor)(neigh.coord, this.current) && !this.isVisited(neigh.coord)) {
                     neighbourToWalk = neigh.coord;
-                    neighboursToWalk++;
+                    neighboursToWalkCnt++;
                 }
             }
-            if (neighboursToWalk > 1) // we push the CROSSROAD to the stack (not the neighbour)
-            // due to backtracking to the last milestone
+            if (neighboursToWalkCnt > 1) // more than one neighbour -> we need to save a checkpoint
+            // for backtracking
             this.checkpointStack.push(this.current);
             if (neighbourToWalk) {
                 canWalkForward = true;
@@ -1029,49 +1041,51 @@ class MapExplorer {
                 };
             } else canWalkForward = false;
         }
+        // generate neighbours as we have already discovered all cells
         this.blindMap.generateNeighbors();
-        // at this moment, the salesman knows the map
-        // let's use dijsktra to find the shortest path from A to B
         return null;
     }
-    updateBackTrack(from, to) {
-        this.backTrack[this.coordToIndex(to)] = this.coordToIndex(from);
-    }
-    backTrace(newCoord) {
-        // first run
-        if (newCoord.eq(this.current)) return [
-            newCoord
+    backTrace(target) {
+        if ((0, _coord.coordEq)(target, this.current)) // trivial solution -> staying on the same place
+        return [
+            target
         ];
-        if (this.blindMap.getTile(newCoord).type === "UNKNOWN") throw new Error("I don't know what is there!");
-        if (!this.blindMap.getTile(newCoord).isWalkable) throw new Error("I can't go there!");
-        const distX = Math.abs(newCoord.x - this.current.x);
-        const distY = Math.abs(newCoord.y - this.current.y);
-        const isNeighbor = distX <= 1 && distY <= 1 && distX !== distY; // ignore diagonal 
-        if (isNeighbor) return [
-            newCoord
+        if (this.blindMap.getTile(target).type === "UNKNOWN") throw new Error(`Can\'t walk to an unknown area: [${target.x},${target.y}]`);
+        if ((0, _coord.isDirectionalNeighbor)(target, this.current)) // semi-trivial solution - going one cell back
+        return [
+            target
         ];
         else {
-            // we need to backtrack			
-            const output = [];
-            let step = this.backTrack[this.coordToIndex(this.current)];
-            const toIndex = this.coordToIndex(newCoord);
+            // iterative backtracking
+            const path = [];
+            let nextStep = this.backTrack.get(this.coordToIndex(this.current));
+            const toIndex = this.coordToIndex(target);
+            let overFlowCheck = 0;
             while(true){
-                const stepCoord = this.blindMap.indexToCoord(step);
-                output.push(stepCoord);
-                if (step === toIndex) break;
-                step = this.backTrack[step];
+                path.push(this.indexToCoord(nextStep));
+                if (nextStep === toIndex) break;
+                nextStep = this.backTrack.get(nextStep);
+                if ((overFlowCheck++) >= this.blindMap.width * this.blindMap.height) throw new Error(`Backtrace got in an infinite loop for [${target.x},${target.y}]`);
             }
-            return output;
+            return path;
         }
     }
     coordToIndex = (coord)=>this.blindMap.coordToIndex(coord);
     indexToCoord = (index)=>this.blindMap.indexToCoord(index);
+    reset() {
+        this.backTrack = new Map();
+        this.visitedNodes = new Set();
+        this.exploredNodes = new Set();
+        this.blindMap.generateNeighbors();
+        this.checkpointStack = new (0, _stack.Stack)();
+    }
     isVisited(coord) {
         return this.visitedNodes.has(this.coordToIndex(coord));
     }
     visitNewNode(coord) {
         this.visitedNodes.add(this.coordToIndex(coord));
-        if (!this.current.eq(coord)) this.updateBackTrack(this.current, coord);
+        if (!(0, _coord.coordEq)(this.current, coord)) // update backtrack
+        this.backTrack.set(this.coordToIndex(coord), this.coordToIndex(this.current));
         this.current = coord;
     }
     isExplored(coord) {
@@ -1123,58 +1137,65 @@ class Stack {
 },{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"i3Uq0":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "PathFinder", ()=>PathFinder);
+/**
+ * Dijkstra algorithm that uses priority queue to find the shortest
+ * path from start node to all other nodes
+ */ parcelHelpers.export(exports, "PathFinder", ()=>PathFinder);
 var _priorityQueue = require("./PriorityQueue");
 class PathFinder {
-    findPath(startCoord, endCoord, map) {
-        //console.log(`Running Dijkstra: [${startCoord.x},${startCoord.y}] -> [${endCoord.x},${endCoord.y}]`);
-        this.steps = {};
-        // todo store in separate object or return a result entity
-        let backtrace = {};
-        let pq = new (0, _priorityQueue.PriorityQueue)();
-        const startIndex = map.coordToIndex(startCoord);
-        const endIndex = map.coordToIndex(endCoord);
-        this.steps[startIndex] = 0;
-        map.mapArray.forEach((val)=>{
-            // todo we could use index from the iterator as well
-            const index = map.coordToIndex(val.coord);
-            if (index !== startIndex) this.steps[index] = Infinity;
-        });
-        pq.enqueue(startCoord, 0);
-        while(!pq.isEmpty){
-            let currentCoord = pq.dequeue()[0];
+    findPath(start, end, map) {
+        const generator = this.findPathIteratively(start, end, map);
+        let val = generator.next();
+        while(!val.done)val = generator.next();
+        return this.closestPath;
+    }
+    *findPathIteratively(start, end, map) {
+        this.reset();
+        const startIndex = map.coordToIndex(start);
+        const endIndex = map.coordToIndex(end);
+        // steps to all nodes are initialized to infinity, except the starting node
+        for(let i = 0; i < map.width * map.height; i++)this.steps.set(i, Infinity);
+        this.steps.set(startIndex, 0);
+        this.queue.enqueue(start, 0);
+        while(!this.queue.isEmpty){
+            let currentCoord = this.queue.dequeue();
+            yield {
+                currentCoord
+            };
             let currentIndex = map.coordToIndex(currentCoord);
+            let currentPrice = this.steps.get(currentIndex);
+            // explore all neighbors and ignore diagonals
             const neighbors = map.getTile(currentCoord).directionalNeighbors;
-            neighbors.forEach((val)=>{
-                if (val && val.isWalkable) {
-                    const neighbourIndex = map.coordToIndex(val.coord);
-                    let price = this.steps[currentIndex] + 1;
-                    if (price < this.steps[neighbourIndex]) {
-                        this.steps[neighbourIndex] = price;
-                        backtrace[neighbourIndex] = currentIndex;
-                        pq.enqueue(val.coord, price);
+            neighbors.forEach((neigh)=>{
+                if (neigh && neigh.isWalkable) {
+                    const neighbourIndex = map.coordToIndex(neigh.coord);
+                    let price = currentPrice + 1;
+                    if (price < this.steps.get(neighbourIndex)) {
+                        // we found a better path -> store the backtrace
+                        this.steps.set(neighbourIndex, price);
+                        this.backTrace.set(neighbourIndex, currentIndex);
+                        this.queue.enqueue(neigh.coord, price);
                     }
                 }
             });
         }
-        let path = [
-            endCoord
+        // backtrack and fill the output path
+        let closestPath = [
+            end
         ];
-        let lastStep = endIndex;
-        /*
-		// print backtrace:
-		Object.keys(backtrace).forEach(key => {
-			const val = backtrace[key];
-			const fromCoord = map.indexToCoord(parseInt(key));
-			const toCoord = map.indexToCoord(val);
-			console.log(`[${fromCoord.x},${fromCoord.y}] -> [${toCoord.x}, ${toCoord.y}]`);
-		});*/ while(lastStep && lastStep !== startIndex){
-            path.unshift(map.indexToCoord(backtrace[lastStep]));
-            lastStep = backtrace[lastStep];
+        let currentStep = endIndex;
+        while(currentStep && currentStep !== startIndex){
+            const nextStep = this.backTrace.get(currentStep);
+            closestPath.push(map.indexToCoord(nextStep));
+            currentStep = nextStep;
         }
-        //console.log('\nFinal path:');
-        console.log(path.map((c)=>c.print()).join(" : "));
-        return path;
+        closestPath.reverse();
+        return null;
+    }
+    reset() {
+        this.steps = new Map();
+        this.backTrace = new Map();
+        this.queue = new (0, _priorityQueue.PriorityQueue)();
     }
 }
 
@@ -1209,7 +1230,7 @@ class PriorityQueue {
     }
     dequeue() {
         let value = this.collection.shift();
-        return value;
+        return value[0];
     }
     get isEmpty() {
         return this.collection.length === 0;
@@ -1248,7 +1269,7 @@ class TSP {
         return y * this.width + x;
     };
     indexToCoord = (x)=>{
-        return new (0, _coord.Coord)(x % this.width, Math.floor(x / this.width));
+        return (0, _coord.makeCoord)(x % this.width, Math.floor(x / this.width));
     };
     notIn = (elem, subset)=>{
         return (1 << elem & subset) == 0;
@@ -1335,8 +1356,6 @@ class TSP {
         this.N = this.width;
         this.start = startCity;
         this.solve();
-        console.log(this.tour);
-        console.log(this.minTourCost);
         return this.tour;
     };
 }

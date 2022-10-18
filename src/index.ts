@@ -1,5 +1,5 @@
 import { MapGrid } from './MapGrid';
-import { Coord } from './Coord';
+import { Coord, makeCoord, coordEq } from './Coord';
 import { MapExplorer } from './MapExplorer';
 import { PathFinder } from './PathFinder';
 import { TSP } from './TSP';
@@ -29,13 +29,13 @@ for (let i = 0; i < HEIGHT; i++) {
 		// repeat pattern from the map above
 		switch(arr[(10 * (i % 10)) + j % 10]) {
 			case '.':
-				realMap.setTile(new Coord(j, i), 'ROAD');
+				realMap.setTile(makeCoord(j, i), 'ROAD');
 				break;
 			case 'x':
-				realMap.setTile(new Coord(j, i), 'WALL');
+				realMap.setTile(makeCoord(j, i), 'WALL');
 				break;
 			case 'o':
-				realMap.setTile(new Coord(j, i), 'CITY');
+				realMap.setTile(makeCoord(j, i), 'CITY');
 				break;
 			default:
 				throw new Error('Unknown map tile');
@@ -43,8 +43,6 @@ for (let i = 0; i < HEIGHT; i++) {
 	}
 }
 realMap.generateNeighbors();
-console.log(realMap.print());
-
 
 const getStartingCity = () => {
 	console.log('Finding a starting city:');
@@ -54,15 +52,13 @@ const getStartingCity = () => {
 
 	let cnt = 0;
 	const cityTile = realMap.mapArray.find((val) => val.type === 'CITY' && ++cnt === randomLoc);
-	console.log('Initial pos: ');
-	console.log(cityTile.coord.print());
 	return cityTile;
 }
 
 const originalCoord = getStartingCity();
 const explorer = new MapExplorer(WIDTH, HEIGHT);
 
-const gen = explorer.exploreMap(originalCoord.coord, realMap);
+const gen = explorer.exploreMapIteratively(originalCoord.coord, realMap);
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d');
 
@@ -74,7 +70,7 @@ const drawCanvas = () => {
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 	for (let i = 0; i < WIDTH; i++) {
 		for (let j = 0; j < HEIGHT; j++) {
-			const coord = new Coord(i, j);
+			const coord = makeCoord(i, j);
 			const tile = explorer.blindMap.getTile(coord);
 			switch(tile.type) {
 				case 'UNKNOWN':
@@ -90,7 +86,7 @@ const drawCanvas = () => {
 					ctx.fillStyle = '#CD444455';	
 				break;
 			}
-			if(explorer.current.eq(tile.coord)) {
+			if(coordEq(explorer.current, tile.coord)) {
 				ctx.fillStyle = '#EFEFEF';
 			}
 			const blockSize = canvasWidth / WIDTH;
@@ -102,10 +98,10 @@ const drawCanvas = () => {
 				ctx.fillStyle = '#FFFFFF';
 				ctx.fillText(`[${i},${j}]`, i * blockSize + 10 / ratio, j * blockSize + 45 / ratio);
 
-				const backTrace = explorer.backTrack[explorer.coordToIndex(coord)];
+				const backTrace = explorer.backTrack[realMap.coordToIndex(coord)];
 				
 				if(backTrace) {
-					const toCoord = explorer.indexToCoord(backTrace);
+					const toCoord = realMap.indexToCoord(backTrace);
 					const isLeft = toCoord.x === coord.x - 1;
 					const isRight = toCoord.x === coord.x + 1;
 					const isTop = toCoord.y === coord.y - 1;
@@ -116,7 +112,7 @@ const drawCanvas = () => {
 					ctx.fillText(symbol, i * blockSize + 30/ratio, j * blockSize + 70/ratio);
 				}
 	
-				const isInStack = stack.find(t => t.eq(coord));
+				const isInStack = stack.find(t => coordEq(t, coord));
 				if(isInStack) {
 					ctx.fillStyle = '#ADADAD';
 					ctx.fillRect(i * blockSize, j * blockSize, 10/ratio, 10/ratio);
@@ -178,8 +174,9 @@ let interval = setInterval(() => {
 		}
 		console.log(print);
 		// 2) find solution for that spanning tree
-		const cityWhereWeAre = cities.findIndex(c => c.coord.eq(originalCoord.coord));
-		new TSP(distanceArray, citiesCnt, citiesCnt).TSP(cityWhereWeAre);
+		const cityWhereWeAre = cities.findIndex(c => coordEq(c.coord, originalCoord.coord));
+		const tsp = new TSP();
+		const tour = tsp.solve(cityWhereWeAre, citiesCnt, distanceArray);
 	} else {
 		lastCoord = status.value.tile.coord;
 	}

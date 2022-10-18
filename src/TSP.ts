@@ -1,142 +1,111 @@
-import { Coord } from './Coord';
+import { Coord, makeCoord } from './Coord';
 
 // https://www.interviewbit.com/blog/travelling-salesman-problem/
+
+/**
+ * Travelling Salesman Problem Solver
+ * Since this is a NP problem solver, it uses Dynamic Programming and a bit array
+ * The maximum number of cities is the number of bits in JS Number type = 64
+ * 
+ * Distance array example (the array doesn't need to be symmetric):
+ * 
+ *         London    Paris    Prague
+ * London    0        342      1267
+ * Paris    342        0       1032
+ * Prague   1267      1032       0
+ * 
+ */
 export class TSP {
+	startCityIndex = 0;
+	// a symmetric 2D array of city-city min distances
+	distances: number[] = [];
+	// found tour when the algorithm ends
+	tour: number[];
+	minTourCost: number;
+	citiesNum: number;
+	// sparse 2D array for memoizing permutations for each city
+	memoizer: number[][];
 
-	width: number;
-	height: number;
+	solve(startCityIndex: number, citiesNum: number, distances: number[]) {
+		this.distances = distances;
+		this.citiesNum = citiesNum;
+		this.startCityIndex = startCityIndex;
+		this.reset(citiesNum);
 
-	N = 0;
-	start = 0;
-	distance: number[] = [];
-	tour: number[] = [];
-	minTourCost = Infinity;
-
-	constructor(distance: number[], width: number, height: number) {
-		this.distance = distance;
-		this.width = width;
-		this.height = height;
-
-		/*this.width = this.height = 6;
-		this.distance = [];
-		for(let i = 0; i < this.width * this.height; i++) {
-			this.distance[i] = 10000;
-		}
-		this.distance[this.coordToIndex(5, 0)] = 10;
-		this.distance[this.coordToIndex(1, 5)] = 12;
-		this.distance[this.coordToIndex(4, 1)] = 2;
-		this.distance[this.coordToIndex(2, 4)] = 4;
-		this.distance[this.coordToIndex(3, 2)] = 6;
-		this.distance[this.coordToIndex(0, 3)] = 8;*/
-	}
-
-	coordToIndex = (x: number, y: number): number => {
-		if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
-			return -1;
-		}
-		return y * this.width + x;
-	}
-
-	indexToCoord = (x: number): Coord => {
-		return new Coord(x % this.width, Math.floor(x / this.width));
-	}
-
-	notIn = (elem: number, subset: number) => {
-		return ((1 << elem) & subset) == 0;
-	}
-
-	// This method generates all bit sets of size n where r bits 
-	// are set to one. The result is returned as a list of integer masks.
-	combinations = (r: number, n: number) => {
-		const subsets: number[] = [];
-		this.combinations2(0, 0, r, n, subsets);
-		return subsets;
-	}
-
-	// To find all the combinations of size r we need to recurse until we have
-	// selected r elements (aka r = 0), otherwise if r != 0 then we still need to select
-	// an element which is found after the position of our last selected element
-	combinations2 = (set: number, at: number, r: number, n: number, subsets: number[]) => {
-
-		// Return early if there are more elements left to select than what is available.
-		let elementsLeftToPick = n - at;
-		if (elementsLeftToPick < r) return;
-
-		// We selected 'r' elements so we found a valid subset!
-		if (r == 0) {
-			subsets.push(set);
-		} else {
-			for (let i = at; i < n; i++) {
-				// Try including this element
-				set |= 1 << i;
-
-				this.combinations2(set, i + 1, r - 1, n, subsets);
-
-				// Backtrack and try the instance where we did not include this element
-				set &= ~(1 << i);
+		// add all outgoing edges from the starting node to memo table.
+		for (let cityIndex = 0; cityIndex < this.citiesNum; cityIndex++) {
+			if (cityIndex == this.startCityIndex) {
+				continue;
 			}
-		}
-	}
-
-	solve = () => {
-		let END_STATE = (1 << this.N) - 1;
-		let memo: number[] = [];
-		const memoWidth = this.N;
-		const memoHeight = 1 << this.N;
-
-		const memoIndex = (x: number, y: number) => y * memoWidth + x;
-
-		// Add all outgoing edges from the starting node to memo table.
-		for (let end = 0; end < this.N; end++) {
-			if (end == this.start) continue;
-			memo[memoIndex(end, (1 << this.start) | (1 << end))] = this.distance[this.coordToIndex(this.start, end)];
+			// permutation with the start city and all neighbours as the second city
+			const permutation = (1 << cityIndex) | (1 << this.startCityIndex);
+			this.memoize(cityIndex, permutation, this.distances[this.coordToIndex(this.startCityIndex, cityIndex)]);
 		}
 
-		for (let r = 3; r <= this.N; r++) {
-			const combinations = this.combinations(r, this.N);
-
-			for (let subset of combinations) {
-				if (this.notIn(this.start, subset)) {
+		// 1st loop: starting from the 3rd city, as the 2nd is already memoized
+		for (let cityIndex = 3; cityIndex <= this.citiesNum; cityIndex++) {
+			const permutations = this.generatePermutations(cityIndex);
+			// 2nd loop: go over each permutation for this city and memoize the promising ones
+			for (let permutation of permutations) {
+				if (this.notIn(this.startCityIndex, permutation)) {
+					// invalid permutation
 					continue;
 				}
-				for (let next = 0; next < this.N; next++) {
-					if (next == this.start || this.notIn(next, subset)) continue;
-					let subsetWithoutNext = subset ^ (1 << next);
-					let minDist = Infinity;
-					for (let end = 0; end < this.N; end++) {
-						if (end == this.start || end == next || this.notIn(end, subset)) continue;
-						let newDistance = memo[memoIndex(end, subsetWithoutNext)] + this.distance[this.coordToIndex(end, next)];
-						if (newDistance < minDist) {
-							minDist = newDistance;
-						}
+				// 3rd loop: find the promising next city
+				for (let nextCityIndex = 0; nextCityIndex < this.citiesNum; nextCityIndex++) {
+					if (nextCityIndex == this.startCityIndex || this.notIn(nextCityIndex, permutation)) {
+						// invalid permutation
+						continue;
 					}
-					memo[memoIndex(next, subset)] = minDist;
+					let permutationWithoutNextCity = permutation ^ (1 << nextCityIndex);
+					let minDist = Infinity;
+					// 4th loop: find the min distance from permutations that don't include the next city
+					// and add the min distance to the next city
+					for (let endCityIndex = 0; endCityIndex < this.citiesNum; endCityIndex++) {
+						if (endCityIndex == this.startCityIndex || endCityIndex == nextCityIndex || this.notIn(endCityIndex, permutation)) {
+							// invalid permutation
+							continue;
+						}
+						let newDistance = this.getMemoized(endCityIndex, permutationWithoutNextCity) 
+							+ this.distances[this.coordToIndex(endCityIndex, nextCityIndex)];
+						minDist = Math.min(minDist, newDistance);
+					}
+					this.memoize(nextCityIndex, permutation, minDist);
 				}
 			}
 		}
 
-		// Connect tour back to starting node and minimize cost.
-		for (let i = 0; i < this.N; i++) {
-			if (i == this.start) continue;
-			let tourCost = memo[memoIndex(i, END_STATE)] + this.distance[this.coordToIndex(i, this.start)];
+		// ending subset -> all bits are set to 1 
+		const END_STATE = (1 << this.citiesNum) - 1;
+
+		// backtrack the output tour  and minimize cost.
+		for (let i = 0; i < this.citiesNum; i++) {
+			if (i == this.startCityIndex) {
+				continue;
+			}
+			let tourCost = this.getMemoized(i, END_STATE) + this.distances[this.coordToIndex(i, this.startCityIndex)];
 			if (tourCost < this.minTourCost) {
 				this.minTourCost = tourCost;
 			}
 		}
 
-		let lastIndex = this.start;
+		let lastIndex = this.startCityIndex;
 		let state = END_STATE;
-		this.tour.push(this.start);
+		this.tour.push(this.startCityIndex);
 
-		// Reconstruct TSP path from memo table.
-		for (let i = 1; i < this.N; i++) {
-
+		// reconstruct TSP path from the memorizer table.
+		for (let i = 1; i < this.citiesNum; i++) {
 			let index = -1;
-			for (let j = 0; j < this.N; j++) {
-				if (j == this.start || this.notIn(j, state)) continue;
-				if (index == -1) index = j;
-				let prevDist = memo[memoIndex(index, state)] + this.distance[this.coordToIndex(index, lastIndex)];
-				let newDist = memo[memoIndex(j, state)] + this.distance[this.coordToIndex(j, lastIndex)];
+			for (let j = 0; j < this.citiesNum; j++) {
+				if (j == this.startCityIndex || this.notIn(j, state)) {
+					continue;
+				}
+				if (index == -1) {
+					// first valid index of the second loop
+					index = j;
+				}
+				let prevDist = this.getMemoized(index, state) + this.distances[this.coordToIndex(index, lastIndex)];
+				let newDist = this.getMemoized(j, state) + this.distances[this.coordToIndex(j, lastIndex)];
 				if (newDist < prevDist) {
 					index = j;
 				}
@@ -147,17 +116,78 @@ export class TSP {
 			lastIndex = index;
 		}
 
-		this.tour.push(this.start);
+		this.tour.push(this.startCityIndex);
 		this.tour.reverse();
+		return this.tour;
 	}
 
+	private generatePermutations(cityIndex: number) {
+		const permutations: number[] = [];
+		this.generatePermutationsRec(0, 0, this.citiesNum, cityIndex, permutations);
+		return permutations;
+	}
 
-	TSP = (startCity: number) => {
-		this.N = this.width;
-		this.start = startCity;
-		this.solve();
-		console.log(this.tour);
-		console.log(this.minTourCost);
-		return this.tour;
+	/**
+	 * Generates all bit sets where r bits are set to one. Returns a list of integer masks
+	 * We start with "r" elements and recurse down until r = 0 
+	 * @param set - bit mask to which the permutations are generated
+	 * @param from - first bit from which the permutations are generated
+	 * @param to - last bit from which the permutations are generated
+	 * @param r - the number of "bits" to select. If r == (to - from),  we get a full permutation
+	 * @param permutations output array of integer masks
+	 */
+	private generatePermutationsRec(set: number, from: number, to: number, r: number, permutations: number[]) {
+
+		// return early if there are more elements left to select than what is available
+		if ((to - from) < r) {
+			return;
+		}
+
+		// We selected 'r' elements so we found a valid subset!
+		if (r == 0) {
+			permutations.push(set);
+		} else {
+			for (let i = from; i < to; i++) {
+				// try to include this bit
+				set |= 1 << i;
+				// generate other bits when bit i is 1
+				this.generatePermutationsRec(set, i + 1, to, r - 1, permutations);
+				// revert back and go to the next instance where we did not include this element
+				set &= ~(1 << i);
+			}
+		}
+	}
+	
+	private reset(citiesNum: number) {
+		this.memoizer = [];
+		this.tour = [];
+		this.minTourCost = Infinity;
+
+		// init 2D array
+		for(let i = 0; i < citiesNum; i++) {
+			this.memoizer[i] = [];
+		}
+	}
+
+	private memoize(cityIndex: number, permutation: number, distance: number) {
+		this.memoizer[cityIndex][permutation] = distance;
+	}
+
+	private getMemoized(cityIndex: number, permutation: number) {
+		return this.memoizer[cityIndex][permutation];
+	}
+
+	/**
+ 	* Returns true if the bits of element are inside the bits of the subset param
+ 	*/
+	private notIn(elem: number, subset: number) {
+		return ((1 << elem) & subset) == 0;
+	}
+
+	private coordToIndex = (x: number, y: number): number => {
+		if (x < 0 || y < 0 || x >= this.citiesNum || y >= this.citiesNum) {
+			return -1;
+		}
+		return y * this.citiesNum + x;
 	}
 }

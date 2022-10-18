@@ -1,65 +1,81 @@
 /**
  * 2D map Coordinate
  */
-export class Coord {
-	private _x: number;
-	private _y: number;
+export type Coord = {
+	x: number;
+	y: number;
+}
 
-	constructor(x: number, y: number) {
-		this._x = x;
-		this._y = y;
+// helper for better readability
+export const makeCoord = (x: number, y: number): Coord => {
+	return {
+		x,
+		y
 	}
+}
 
-	get x() {
-		return this._x;
+export const coordEq = (a: Coord, b: Coord) => {
+	return a.x === b.x && a.y === b.y;
+}
+
+export const coordLeft = (coord: Coord): Coord => {
+	return {
+		x: coord.x - 1,
+		y: coord.y
 	}
+}
 
-	get y() {
-		return this._y;
+export const coordRight = (coord: Coord) => {
+	return {
+		x: coord.x + 1,
+		y: coord.y
 	}
+}
 
-	/**
-	 * Checks whether the coordinate is equal to the one passed as a parameter
-	 * @param other 
-	 * @returns true if same
-	 */
-	eq(other: Coord) {
-		return this.x === other.x && this.y === other.y;
+export const coordTop = (coord: Coord) => {
+	return {
+		x: coord.x,
+		y: coord.y - 1
 	}
+}
 
-	left() {
-		return new Coord(this.x - 1, this.y);
+export const coordBottom = (coord: Coord) => {
+	return {
+		x: coord.x,
+		y: coord.y + 1
 	}
+}
 
-	right() {
-		return new Coord(this.x + 1, this.y);
+export const coordTopLeft = (coord: Coord) => {
+	return {
+		x: coord.x - 1,
+		y: coord.y - 1
 	}
+}
 
-	top() {
-		return new Coord(this.x, this.y - 1);
+export const coordTopRight = (coord: Coord) => {
+	return {
+		x: coord.x + 1,
+		y: coord.y - 1
 	}
+}
 
-	bottom() {
-		return new Coord(this.x, this.y + 1);
+export const coordBottomLeft = (coord: Coord) => {
+	return {
+		x: coord.x - 1,
+		y: coord.y + 1
 	}
+}
 
-	topLeft() {
-		return new Coord(this.x - 1, this.y - 1);
+export const coordBottomRight = (coord: Coord) => {
+	return {
+		x: coord.x + 1,
+		y: coord.y + 1
 	}
+}
 
-	topRight() {
-		return new Coord(this.x + 1, this.y - 1);
-	}
-
-	bottomLeft() {
-		return new Coord(this.x - 1, this.y + 1);
-	}
-
-	bottomRight() {
-		return new Coord(this.x + 1, this.y + 1);
-	}
-
-	print() {
-		return `[${this.x},${this.y}]`
-    }
+export const isDirectionalNeighbor = (a: Coord, b: Coord) => {
+	const distX = Math.abs(a.x - b.x);
+	const distY = Math.abs(a.y - b.y);
+	return distX <= 1 && distY <= 1 && distX !== distY;
 }

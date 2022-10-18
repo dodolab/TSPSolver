@@ -3,9 +3,12 @@ import { Neighbor } from './MapGrid';
 
 export type TileType = 'UNKNOWN' | 'ROAD' | 'WALL' | 'CITY';
 
+/**
+ * Structure for map tiles, keeping references to all neighbours
+ */
 export class MapTile {
 	neighbors: Record<Neighbor, MapTile>;
-	// directional neighbors in an array. Can be null if there is no such neighbour!
+	neighborsArr: MapTile[];
 	directionalNeighbors: [MapTile, MapTile, MapTile, MapTile];
 	coord: Coord;
 	type: TileType;
