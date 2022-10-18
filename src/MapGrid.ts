@@ -3,7 +3,6 @@ import { MapTile, TileType } from './MapTile';
 
 export type Neighbor = 'left' | 'right' | 'top' | 'bottom' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 
-
 export class MapGrid {
 	mapArray: MapTile[] = [];
 	width: number;
@@ -56,7 +55,7 @@ export class MapGrid {
 				bottomRight: this.getTile(tile.coord.bottomRight()),
 			}
 			// this order is very important!!!
-			tile.directionalNeighbors = [tile.neighbors.top, tile.neighbors.right, tile.neighbors.bottom, tile.neighbors.left]
+			tile.directionalNeighbors = [tile.neighbors.top, tile.neighbors.left, tile.neighbors.bottom, tile.neighbors.right]
 		}
         this.neighborsGenerated = true;
 	}

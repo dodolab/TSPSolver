@@ -1,6 +1,7 @@
 {
 	"compilerOptions": {
 		"target": "ES6",
+		"esModuleInterop": true,
 		"resolveJsonModule": true, /* allows importing modules with a JSON extension */
 		"downlevelIteration": true /* enables transpiling to an older JS version */
 	},

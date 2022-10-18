@@ -30,20 +30,27 @@ export class MapExplorer {
 		}
 	}
 
+	exploreMapAll(startCoord: Coord, map: MapGrid) {
+		const generator = this.exploreMap(startCoord, map);
+		let val = generator.next();
+		while(!val.done) {
+			val = generator.next();
+		}
+	}
+
 	*exploreMap(startCoord: Coord, map: MapGrid): Generator<MapExploreStatus, MapExploreStatus, MapExploreStatus> {
 		this.backTrack = {};
 		this.visitedNodes = new Set();
 		this.exploredNodes = new Set();
 		this.blindMap.generateNeighbors();
 		this.current = startCoord;
-		console.log(this.blindMap.print());
 
 
 		this.exploreTile(startCoord, map.getTile(startCoord).type);
+		this.visitNewNode(startCoord);
 
 		this.checkpointStack = new Stack<Coord>();
 		this.checkpointStack.push(this.current);
-		console.log('Searching');
 
 		let canWalkForward = false;
 
@@ -62,7 +69,6 @@ export class MapExplorer {
 					lastCheckpoint = this.checkpointStack.pop();
 				}
 
-				console.log('Going to checkpoint [' + lastCheckpoint.x + ',' + lastCheckpoint.y+']');
 				const backTrace = this.backTrace(lastCheckpoint);
 	
 				for(let coord of backTrace) {
@@ -117,7 +123,6 @@ export class MapExplorer {
 		}
 
 		this.blindMap.generateNeighbors();
-		console.log(this.blindMap.print());
 		// at this moment, the salesman knows the map
 		// let's use dijsktra to find the shortest path from A to B
 		return null;
@@ -146,9 +151,7 @@ export class MapExplorer {
 		if(isNeighbor) {
 			return [newCoord]
 		} else {
-			// we need to backtrack
-			//console.log(`Need to go from [${this.current.x},${this.current.y}] to [${newCoord.x}, ${newCoord.y}]`);
-			
+			// we need to backtrack			
 			const output = [];
 			let step = this.backTrack[this.coordToIndex(this.current)];
 

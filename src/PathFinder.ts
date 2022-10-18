@@ -6,7 +6,7 @@ export class PathFinder {
 
 	steps: { [key: number]: number };
 
-	findPath(startCoord: Coord, endCoord: Coord, map: MapGrid) {
+	findPath(startCoord: Coord, endCoord: Coord, map: MapGrid): Coord[] {
 		//console.log(`Running Dijkstra: [${startCoord.x},${startCoord.y}] -> [${endCoord.x},${endCoord.y}]`);
 
 		this.steps = {};
@@ -50,21 +50,10 @@ export class PathFinder {
 		let path: Coord[] = [endCoord];
 		let lastStep = endIndex;
 
-		/*
-		// print backtrace:
-		Object.keys(backtrace).forEach(key => {
-			const val = backtrace[key];
-			const fromCoord = map.indexToCoord(parseInt(key));
-			const toCoord = map.indexToCoord(val);
-			console.log(`[${fromCoord.x},${fromCoord.y}] -> [${toCoord.x}, ${toCoord.y}]`);
-		});*/
-
 		while (lastStep && lastStep !== startIndex) {
 			path.unshift(map.indexToCoord(backtrace[lastStep]));
 			lastStep = backtrace[lastStep];
 		}
-		//console.log('\nFinal path:');
-		console.log(path.map(c => c.print()).join(' : '));
 		return path;
 	}
 }
