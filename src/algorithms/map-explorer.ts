@@ -51,7 +51,7 @@ export class MapExplorer {
 		// we go forward and when we need to go back, we will use the stack
 		let canWalkForward = false;
 
-		while (!this.checkpointStack.isEmpty() || canWalkForward || this.exploredNodes.size === (map.mapArray.length)) {
+		while ((!this.checkpointStack.isEmpty() || canWalkForward) && this.visitedNodes.size !== (map.mapArray.length)) {
 
 			if (!canWalkForward) {
 				let lastCheckpoint = this.checkpointStack.pop();

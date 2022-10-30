@@ -42,6 +42,7 @@ You can try it out live [here](https://dodo.me/salesman/index.html)
 
 #### Known Limitations
 - the canvas always re-renders the full map, no matter what has or hasn't changed - if we'd only re-rendered the changed tiles (would need some kind of memorizer), it would speed up the visual part especially for bigger maps
+- the problem, however, is the scaling -> for instance, the size of each block can be 23.13 x 23.13 (instead of 23x23) - it's better for blurring when the browser window is scaled, but it makes impossible to re-render only changed tiles (as the tiles might have shared borders)
 
 ### Flow
 1. A generator will generate a random map
